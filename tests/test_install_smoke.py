@@ -138,10 +138,13 @@ def test_end_to_end_plan_and_parameterize():
         config=PlannerConfig(planner_name="rrtc", time_limit=2.0),
     )
     start = planner.extract_config(HOME_JOINTS)
-    goal = start.copy()
-    # joint5 (index 4 in the arm subgroup): HOME=0.0, bounds ±2pi, so +0.5
-    # is safely interior.
-    goal[4] += 0.5
+    assert planner.validate(start), "HOME must be collision-free"
+    # Plan to a sampled *collision-free* goal. A hardcoded joint perturbation
+    # can land on a self-collision boundary that floating-point differences
+    # between builds (e.g. manylinux wheels) tip into collision, making the
+    # smoke test flaky; sample_valid() is guaranteed valid by construction.
+    np.random.seed(0)
+    goal = planner.sample_valid()
 
     result = planner.plan(start, goal, time_limit=2.0)
     assert result.success and result.path is not None and result.path.shape[0] >= 2
