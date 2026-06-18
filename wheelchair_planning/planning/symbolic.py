@@ -190,20 +190,14 @@ class SymbolicContext:
                     "q_fk": fk["q"],
                     "joint_names": list(fk["joint_names"]),
                 }
-                # Optionally warm up once under build/casadi_jit so CasADi's
-                # JIT-generated temporary C files are created there instead of
-                # the caller's cwd. This is purely an optimization and requires
-                # a working C toolchain (CasADi's shell JIT). In minimal
-                # pip-only environments (e.g. manylinux test venvs) that JIT can
-                # be unavailable or flaky — swallow any failure; link FK is
-                # still evaluated symbolically below without compilation.
-                if isinstance(cache["T_fk"], ca.Function):
-                    n_q = int(cache["q_fk"].numel())
-                    try:
-                        with _cwd(jit_dir):
-                            cache["T_fk"](np.zeros(n_q))
-                    except Exception:
-                        pass
+                # NOTE: we deliberately do NOT numerically "warm up" T_fk here.
+                # A numeric call would force CasADi's shell JIT to compile the
+                # FK to a .so; with this robot that .so picks up auto-vectorized
+                # libmvec symbols (e.g. _ZGVbN2v_cos) and fails to load in
+                # minimal pip-only environments (manylinux test venvs) — an
+                # uncatchable dynamic-loader crash. We only ever use T_fk
+                # SYMBOLICALLY below (``T_fk(q_sub_expr)``), which never
+                # compiles, so the warm-up is both unnecessary and unsafe here.
                 self._fk_cache[link_name] = cache
 
             full = self._build_full_q(q_active)
