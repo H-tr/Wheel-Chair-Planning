@@ -48,8 +48,10 @@ def arm_start(arm_planner, home_joints) -> np.ndarray:
 def table_pointcloud(repo_root) -> np.ndarray:
     """Bundled table.ply rotated and shifted in front of the robot.
 
-    Mirrors ``examples/motion_planning_example.py::load_table`` so the
-    motion-planning tests exercise the same geometry the demo uses.
+    Mirrors ``examples/planning/motion.py::load_table`` so the motion-planning
+    tests exercise the same geometry the demo uses. The table is placed far
+    enough forward/up to clear the (large) wheelchair chassis at HOME — the
+    base is "parked" near the table and only the arm plans around it.
     """
     trimesh = pytest.importorskip("trimesh")
     import wheelchair_planning
@@ -62,6 +64,6 @@ def table_pointcloud(repo_root) -> np.ndarray:
         [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32
     )
     pts = pts @ rot.T
-    pts[:, 0] += 0.85
-    pts[:, 2] += 0.35
+    pts[:, 0] += 1.4
+    pts[:, 2] += 0.9
     return pts
