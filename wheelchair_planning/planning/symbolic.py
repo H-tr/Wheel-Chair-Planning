@@ -190,12 +190,20 @@ class SymbolicContext:
                     "q_fk": fk["q"],
                     "joint_names": list(fk["joint_names"]),
                 }
-                # Warm up once under build/casadi_jit so CasADi's JIT-generated
-                # temporary C files are created there instead of the caller's cwd.
+                # Optionally warm up once under build/casadi_jit so CasADi's
+                # JIT-generated temporary C files are created there instead of
+                # the caller's cwd. This is purely an optimization and requires
+                # a working C toolchain (CasADi's shell JIT). In minimal
+                # pip-only environments (e.g. manylinux test venvs) that JIT can
+                # be unavailable or flaky — swallow any failure; link FK is
+                # still evaluated symbolically below without compilation.
                 if isinstance(cache["T_fk"], ca.Function):
                     n_q = int(cache["q_fk"].numel())
-                    with _cwd(jit_dir):
-                        cache["T_fk"](np.zeros(n_q))
+                    try:
+                        with _cwd(jit_dir):
+                            cache["T_fk"](np.zeros(n_q))
+                    except Exception:
+                        pass
                 self._fk_cache[link_name] = cache
 
             full = self._build_full_q(q_active)
