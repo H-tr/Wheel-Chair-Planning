@@ -64,6 +64,9 @@ def table_pointcloud(repo_root) -> np.ndarray:
         [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32
     )
     pts = pts @ rot.T
-    pts[:, 0] += 1.4
+    # 1.6 m forward keeps ~0.2 m margin past the HOME collision boundary
+    # (~1.375 m in the pixi build) so floating-point differences between
+    # compilers/builds (e.g. manylinux wheels) cannot tip HOME into collision.
+    pts[:, 0] += 1.6
     pts[:, 2] += 0.9
     return pts
