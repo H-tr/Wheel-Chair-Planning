@@ -1,0 +1,10 @@
+{
+    "name": "Wheelchair",
+    "urdf": "../../../resources/robot/wheelchair/wheelchair_spherized.urdf",
+    "srdf": "../../../resources/robot/wheelchair/wheelchair.srdf",
+    "end_effector": "link_tcp",
+    "resolution": 64,
+    "template": "../../../third_party/cricket/resources/templates/fk_template.hh",
+    "subtemplates": [{"name": "ccfk", "template": "../../../third_party/cricket/resources/templates/ccfk_template.hh"}],
+    "output": "wheelchair.hh"
+}

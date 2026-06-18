@@ -15,9 +15,16 @@ dev = { features = ["dev"], solve-group = "default" }
 env = { PYTHONPATH = "" }
 
 [tasks]
-cricket-configure = "cmake -GNinja -S third_party/cricket -B third_party/cricket/build"
+# cricket's fkcc_gen.cc uses fmt::format but only includes <fmt/core.h>; in
+# fmt >= 11 that symbol lives in <fmt/format.h>. scripts/patch_submodules.sh
+# rewrites the include in the pinned submodule's working tree (idempotent;
+# the commit pin is unchanged) — same approach as the carried OMPL patch.
+cricket-configure = "bash scripts/patch_submodules.sh && cmake -GNinja -S third_party/cricket -B third_party/cricket/build"
 cricket-build = { cmd = "cmake --build third_party/cricket/build", depends-on = ["cricket-configure"] }
-foam-configure = "cmake -GNinja -S third_party/foam -B third_party/foam/build"
+# foam's CompilerSettings.cmake hardcodes -flto in the Release flags; the bundled
+# spheretree static archive then fails to link under gcc 14 LTO. Append -fno-lto
+# (last flag wins) to disable it without touching the submodule.
+foam-configure = "cmake -GNinja -S third_party/foam -B third_party/foam/build -DCMAKE_CXX_FLAGS_RELEASE=-fno-lto -DCMAKE_C_FLAGS_RELEASE=-fno-lto"
 foam-build = { cmd = "cmake --build third_party/foam/build", depends-on = ["foam-configure"] }
 build-robot = { cmd = "bash scripts/build_robot.sh", depends-on = ["foam-build"] }
 decompose-robot = { cmd = "bash scripts/decompose_robot.sh", depends-on = ["build-robot"] }
