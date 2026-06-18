@@ -135,12 +135,15 @@ class SymbolicContext:
             self._backend = "urdf2casadi"
             self._urdf_parser = URDFparser()
             self._urdf_parser.from_file(wheelchair_robot_config.urdf_path)
-            # Use the same world-like root as PyBullet visualization when available.
+            # Root the FK at the URDF's actual root link (the link with no
+            # parent). wheelchair.urdf roots at ``base_link``; detecting it
+            # keeps this robust if the runtime URDF changes.
             try:
-                self._urdf_parser.get_joint_info("Link_Zero_Point", "Link_Zero_Point")
-                self._root_link = "Link_Zero_Point"
+                desc = self._urdf_parser.robot_desc
+                roots = [n for n in desc.link_map if n not in desc.parent_map]
+                self._root_link = roots[0] if roots else "base_link"
             except Exception:
-                self._root_link = "Link_Ground_Vehicle"
+                self._root_link = "base_link"
         else:
             raise ModuleNotFoundError(
                 "SymbolicContext requires either pinocchio.casadi or urdf2casadi. "
