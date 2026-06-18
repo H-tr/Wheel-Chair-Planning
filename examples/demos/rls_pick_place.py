@@ -31,14 +31,19 @@ from fire import Fire
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from robot.grasping import embed_arm, solve_pose_or_raise, stitch_paths, topdown_rotation
-from robot.wheelchair_planner import WheelchairPlanner
+from robot.grasping import (  # noqa: E402
+    embed_arm,
+    solve_pose_or_raise,
+    stitch_paths,
+    topdown_rotation,
+)
+from robot.wheelchair_planner import WheelchairPlanner  # noqa: E402
 
-import wheelchair_planning
-from wheelchair_planning.envs.pybullet_env import PyBulletEnv
-from wheelchair_planning.kinematics import create_ik_solver
-from wheelchair_planning.types import PinkIKConfig, SE3Pose
-from wheelchair_planning.wheelchair import (
+import wheelchair_planning  # noqa: E402
+from wheelchair_planning.envs.pybullet_env import PyBulletEnv  # noqa: E402
+from wheelchair_planning.kinematics import create_ik_solver  # noqa: E402
+from wheelchair_planning.types import PinkIKConfig, SE3Pose  # noqa: E402
+from wheelchair_planning.wheelchair import (  # noqa: E402
     HOME_JOINTS,
     VIZ_URDF_PATH,
     wheelchair_robot_config,
@@ -92,7 +97,9 @@ def main(
 
     print("1) Solving grasp IK ...")
     pre_pick = embed_arm(
-        solve_pose_or_raise(solver, _grasp_pose(pick_xyz + [0, 0, lift]), arm_home, "pre-pick"),
+        solve_pose_or_raise(
+            solver, _grasp_pose(pick_xyz + [0, 0, lift]), arm_home, "pre-pick"
+        ),
         home,
     )
     pick = embed_arm(
@@ -100,7 +107,9 @@ def main(
         pre_pick,
     )
     pre_place = embed_arm(
-        solve_pose_or_raise(solver, _grasp_pose(place_xyz + [0, 0, lift]), pick[3:10], "pre-place"),
+        solve_pose_or_raise(
+            solver, _grasp_pose(place_xyz + [0, 0, lift]), pick[3:10], "pre-place"
+        ),
         pick,
     )
     place = embed_arm(
@@ -115,15 +124,22 @@ def main(
 
     segs = []
     waypoints = [home, pre_pick, pick, pre_place, place, home]
-    labels = ["home->pre_pick", "pre_pick->pick", "pick->pre_place",
-              "pre_place->place", "place->home"]
+    labels = [
+        "home->pre_pick",
+        "pre_pick->pick",
+        "pick->pre_place",
+        "pre_place->place",
+        "place->home",
+    ]
     for (a, b), label in zip(zip(waypoints[:-1], waypoints[1:]), labels):
         t0 = time.perf_counter()
         res = ap.plan_to_joints(GROUP, a, b, time_limit=time_limit)
         if not isinstance(res, np.ndarray):
             print(f"  {label}: FAILED ({res})")
             return
-        print(f"  {label:<20} {res.shape[0]:>4} wp ({(time.perf_counter()-t0)*1e3:.0f} ms)")
+        print(
+            f"  {label:<20} {res.shape[0]:>4} wp ({(time.perf_counter()-t0)*1e3:.0f} ms)"
+        )
         segs.append(res)
 
     full = stitch_paths(*segs)

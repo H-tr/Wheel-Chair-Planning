@@ -44,11 +44,6 @@ from fire import Fire
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "examples"))
 
-from wheelchair_planning.wheelchair import (  # noqa: E402
-    HOME_JOINTS,
-    JOINT_GROUPS,
-    wheelchair_robot_config,
-)
 from wheelchair_planning.envs.pybullet_env import PyBulletEnv  # noqa: E402
 from wheelchair_planning.kinematics import create_ik_solver  # noqa: E402
 from wheelchair_planning.planning import (  # noqa: E402
@@ -67,6 +62,11 @@ from wheelchair_planning.types import (  # noqa: E402
 from wheelchair_planning.utils.video_recorder import (  # noqa: E402
     CameraView,
     VideoRecorder,
+)
+from wheelchair_planning.wheelchair import (  # noqa: E402
+    HOME_JOINTS,
+    JOINT_GROUPS,
+    wheelchair_robot_config,
 )
 
 ASSETS_DIR = _REPO_ROOT / "docs" / "assets"

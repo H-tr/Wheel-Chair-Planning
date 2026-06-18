@@ -21,9 +21,21 @@ from wheelchair_planning.wheelchair import HOME_JOINTS, wheelchair_robot_config
 # 10-DOF array (e.g. the live state from your env) to plan around an
 # arbitrary pose.
 STANCES = {
-    "origin": {"Joint_Virtual_X": 0.0, "Joint_Virtual_Y": 0.0, "Joint_Virtual_Theta": 0.0},
-    "forward": {"Joint_Virtual_X": 0.5, "Joint_Virtual_Y": 0.0, "Joint_Virtual_Theta": 0.0},
-    "turned": {"Joint_Virtual_X": 0.3, "Joint_Virtual_Y": 0.3, "Joint_Virtual_Theta": 0.6},
+    "origin": {
+        "Joint_Virtual_X": 0.0,
+        "Joint_Virtual_Y": 0.0,
+        "Joint_Virtual_Theta": 0.0,
+    },
+    "forward": {
+        "Joint_Virtual_X": 0.5,
+        "Joint_Virtual_Y": 0.0,
+        "Joint_Virtual_Theta": 0.0,
+    },
+    "turned": {
+        "Joint_Virtual_X": 0.3,
+        "Joint_Virtual_Y": 0.3,
+        "Joint_Virtual_Theta": 0.6,
+    },
 }
 
 SUBGROUPS = [

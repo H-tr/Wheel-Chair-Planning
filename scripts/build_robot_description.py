@@ -214,7 +214,12 @@ def generate_base_urdf(preprocessed: ET.ElementTree) -> ET.ElementTree:
     root = tree.getroot()
 
     # Insert the synthetic root + virtual links.
-    for name in [ZERO_POINT_LINK, "Link_Virtual_X", "Link_Virtual_Y", "Link_Virtual_Theta"]:
+    for name in [
+        ZERO_POINT_LINK,
+        "Link_Virtual_X",
+        "Link_Virtual_Y",
+        "Link_Virtual_Theta",
+    ]:
         root.append(ET.fromstring(_VIRTUAL_LINK_TEMPLATE.format(name=name)))
 
     pi = math.pi
@@ -437,7 +442,9 @@ def copy_meshes(
             shutil.copy2(str(src), str(dst))
         copied += 1
 
-    print(f"  copied {copied}/{len(referenced)} mesh files ({scaled} rescaled to metres)")
+    print(
+        f"  copied {copied}/{len(referenced)} mesh files ({scaled} rescaled to metres)"
+    )
 
 
 # ── Stage 6: Repair collision meshes ────────────────────────────────────────
@@ -529,7 +536,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--urdf", type=Path, required=True, help="Path to raw input URDF")
+    parser.add_argument(
+        "--urdf", type=Path, required=True, help="Path to raw input URDF"
+    )
     parser.add_argument(
         "--mesh-dir",
         type=Path,
@@ -537,7 +546,10 @@ def main() -> None:
         help="Root directory of source mesh files (searched recursively)",
     )
     parser.add_argument(
-        "--output-dir", type=Path, required=True, help="Output directory for generated files"
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Output directory for generated files",
     )
     parser.add_argument(
         "--distribute-to",

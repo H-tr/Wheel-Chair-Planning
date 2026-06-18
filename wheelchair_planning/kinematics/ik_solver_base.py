@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from wheelchair_planning.wheelchair import CHAIN_CONFIGS
 from wheelchair_planning.types import (
     ChainConfig,
     IKConfig,
@@ -14,6 +13,7 @@ from wheelchair_planning.types import (
     PinkIKConfig,
     SE3Pose,
 )
+from wheelchair_planning.wheelchair import CHAIN_CONFIGS
 
 
 class IKSolverBase(ABC):

@@ -34,9 +34,9 @@ import numpy as np
 import trimesh
 
 import wheelchair_planning
-from wheelchair_planning.wheelchair import HOME_JOINTS
 from wheelchair_planning.planning import create_planner
 from wheelchair_planning.types import PlannerConfig
+from wheelchair_planning.wheelchair import HOME_JOINTS
 
 # Feasibility planners — return on the first collision-free solution.
 # These are what we quote in the docs landing pitch; ``plan_time_ns``

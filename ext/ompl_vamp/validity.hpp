@@ -66,7 +66,8 @@ inline auto extract_real_state(const ob::State *state)
 
 class WheelchairValidityChecker : public ob::StateValidityChecker {
  public:
-  WheelchairValidityChecker(const ob::SpaceInformationPtr &si, const VampEnv &env)
+  WheelchairValidityChecker(const ob::SpaceInformationPtr &si,
+                            const VampEnv &env)
       : ob::StateValidityChecker(si), env_(env) {}
 
   auto isValid(const ob::State *state) const -> bool override {
@@ -91,7 +92,8 @@ class WheelchairValidityChecker : public ob::StateValidityChecker {
 
 class WheelchairMotionValidator : public ob::MotionValidator {
  public:
-  WheelchairMotionValidator(const ob::SpaceInformationPtr &si, const VampEnv &env)
+  WheelchairMotionValidator(const ob::SpaceInformationPtr &si,
+                            const VampEnv &env)
       : ob::MotionValidator(si), env_(env) {}
 
   auto checkMotion(const ob::State *s1, const ob::State *s2) const

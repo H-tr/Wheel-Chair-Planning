@@ -168,4 +168,6 @@ def test_whole_body_configs_collision_free(home_joints):
     planner = create_planner("wheelchair_whole_body", base_config=home_joints)
     assert planner._ndof == 10
     assert planner.validate(home_joints), "HOME should be collision-free"
-    assert planner.validate(np.zeros(10)), "all-zero 10-DOF config should be collision-free"
+    assert planner.validate(
+        np.zeros(10)
+    ), "all-zero 10-DOF config should be collision-free"

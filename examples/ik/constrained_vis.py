@@ -158,7 +158,13 @@ def main():
         print(f"  pos error: {result.position_error:.6f} m")
         print(f"  ori error: {result.orientation_error:.6f} rad")
         results.append(
-            (name, s, result.position_error, result.orientation_error, result.iterations)
+            (
+                name,
+                s,
+                result.position_error,
+                result.orientation_error,
+                result.iterations,
+            )
         )
 
         if result.joint_positions is not None:
