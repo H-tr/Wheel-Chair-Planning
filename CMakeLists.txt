@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 project(wheelchair_planning_ext LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -18,8 +18,10 @@ set(Boost_NO_BOOST_CMAKE ON)
 
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(nanobind CONFIG REQUIRED)
-find_package(pybind11 CONFIG REQUIRED)
-find_package(Boost REQUIRED COMPONENTS serialization filesystem system)
+# pybind11, orocos-kdl and NLopt are only needed by the optional TRAC-IK
+# extension (conda/pixi environments); pip builds skip it.
+find_package(pybind11 CONFIG QUIET)
+find_package(Boost REQUIRED COMPONENTS serialization)
 find_package(Eigen3 REQUIRED NO_MODULE)
 find_package(orocos_kdl QUIET)
 find_package(PkgConfig QUIET)
@@ -151,6 +153,11 @@ if(TARGET simdxorshift)
     target_compile_options(simdxorshift PRIVATE ${WHEELCHAIR_ARCH_FLAGS_LIST})
 endif()
 
+# cddlib backs VAMP's polytope obstacles, which our extension does not use.
+if(TARGET cdd)
+    set_target_properties(cdd PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
+
 # VAMP headers (our fork with Wheelchair robot — header-only)
 set(VAMP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vamp/src/impl")
 
@@ -163,43 +170,16 @@ set(OMPL_BUILD_VAMP OFF CACHE BOOL "" FORCE)
 set(OMPL_REGISTRATION OFF CACHE BOOL "" FORCE)
 set(OMPL_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 
-# Apply our carried patches against vendored OMPL before its CMake runs.
-# Each patch is idempotent: we read the target file and skip when the patch
-# is already present, so re-running cmake or running ``git submodule
-# update`` (which resets the OMPL tree) both work.
-set(_OMPL_PATCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches")
-set(_OMPL_SUBMODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ompl")
-
-# ompl-nanobind-guard.patch: OMPL's OMPLDependencies.cmake unconditionally
-# add_subdirectory()s its vendored external/nanobind whenever the path
-# exists, ignoring OMPL_BUILD_PYTHON_BINDINGS.  That nanobind 2.x then
-# rejects Python < 3.9, breaking cp38 wheel builds.  The patch adds the
-# missing OMPL_BUILD_PYTHON_BINDINGS gate.  Delete the patch (and this
-# block) once OMPL accepts the fix upstream.
-set(_patch "${_OMPL_PATCH_DIR}/ompl-nanobind-guard.patch")
-set(_target "${_OMPL_SUBMODULE_DIR}/CMakeModules/OMPLDependencies.cmake")
-if(EXISTS "${_target}")
-    file(READ "${_target}" _ompl_deps_content)
-    if(NOT _ompl_deps_content MATCHES "OMPL_BUILD_PYTHON_BINDINGS AND OMPL_HAVE_PYTHON")
-        find_program(PATCH_EXECUTABLE patch REQUIRED)
-        execute_process(
-            COMMAND "${PATCH_EXECUTABLE}" -p1 -i "${_patch}"
-            WORKING_DIRECTORY "${_OMPL_SUBMODULE_DIR}"
-            RESULT_VARIABLE _patch_rc
-            OUTPUT_VARIABLE _patch_stdout
-            ERROR_VARIABLE _patch_stderr
-        )
-        if(NOT _patch_rc EQUAL 0)
-            message(FATAL_ERROR
-                "Failed to apply ${_patch} (rc=${_patch_rc}):\n"
-                "stdout: ${_patch_stdout}\n"
-                "stderr: ${_patch_stderr}")
-        endif()
-        message(STATUS "Applied carried patch: ompl-nanobind-guard.patch")
-    endif()
-endif()
-
-add_subdirectory(third_party/ompl EXCLUDE_FROM_ALL)
+# OMPL's OMPLDependencies.cmake add_subdirectory()s its vendored
+# external/nanobind whenever it finds Python, even with
+# OMPL_BUILD_PYTHON_BINDINGS=OFF, which would shadow the nanobind our
+# extension is built against. OMPL needs Python only for its bindings, so
+# hide it from OMPL's configure step instead of patching the submodule.
+block(SCOPE_FOR VARIABLES)
+    set(CMAKE_DISABLE_FIND_PACKAGE_Python TRUE)
+    set(Python_FOUND FALSE)
+    add_subdirectory(third_party/ompl EXCLUDE_FROM_ALL)
+endblock()
 
 # ── OMPL + VAMP extension ────────────────────────────────────────────
 
@@ -222,8 +202,6 @@ target_link_libraries(_ompl_vamp PRIVATE
     nigh
     pdqsort
     Boost::serialization
-    Boost::filesystem
-    Boost::system
     ${CMAKE_DL_LIBS}   # for dlopen/dlsym in CompiledConstraint
 )
 
@@ -233,30 +211,9 @@ target_compile_options(_ompl_vamp PRIVATE
 
 install(TARGETS _ompl_vamp LIBRARY DESTINATION wheelchair_planning)
 
-# ── Time parameterization extension (TOTG, Eigen-only) ───────────────
-
-nanobind_add_module(_time_parameterization
-    ext/time_parameterization/totg.cpp
-    ext/time_parameterization/time_parameterization_ext.cpp
-)
-
-target_include_directories(_time_parameterization PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/ext/time_parameterization
-)
-
-target_link_libraries(_time_parameterization PRIVATE
-    Eigen3::Eigen
-)
-
-target_compile_options(_time_parameterization PRIVATE
-    ${WHEELCHAIR_ARCH_FLAGS_LIST}
-)
-
-install(TARGETS _time_parameterization LIBRARY DESTINATION wheelchair_planning)
-
 # ── TRAC-IK extension (pybind11) ─────────────────────────────────────
 
-if(orocos_kdl_FOUND AND (NLopt_FOUND OR WHEELCHAIR_NLOPT_LINK_LIBS))
+if(pybind11_FOUND AND orocos_kdl_FOUND AND (NLopt_FOUND OR WHEELCHAIR_NLOPT_LINK_LIBS))
     file(GLOB_RECURSE TRAC_IK_SOURCES "ext/trac_ik/*.cpp")
 
     pybind11_add_module(pytracik ${TRAC_IK_SOURCES})
@@ -275,5 +232,5 @@ if(orocos_kdl_FOUND AND (NLopt_FOUND OR WHEELCHAIR_NLOPT_LINK_LIBS))
 
     install(TARGETS pytracik LIBRARY DESTINATION .)
 else()
-    message(STATUS "Skipping pytracik: orocos-kdl or NLopt not found")
+    message(STATUS "Skipping pytracik: pybind11, orocos-kdl or NLopt not found")
 endif()

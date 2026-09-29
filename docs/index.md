@@ -15,9 +15,9 @@ a unified Python API.
 
     ---
 
-    For inference: **`numpy`, `scipy`, `pink`**. No conda required, no
-    ROS, no MoveIt. Vendor it into any project with a single
-    `pip install -e .`.
+    Three runtime deps: **`numpy`, `scipy`, `casadi`**. No conda
+    required, no ROS, no MoveIt. Vendor it into any project with a
+    single `pip install -e .`.
 
 -   :material-source-branch:{ .lg .middle } __26 planners__
 
@@ -122,7 +122,8 @@ cd Wheel-Chair-Planning
 pip install -e .
 ```
 
-Three runtime deps: `numpy`, `scipy`, `pink`. No conda, no ROS, no
-MoveIt. See the [Getting Started](getting-started.md) guide for the
+Three runtime deps: `numpy`, `scipy`, `casadi`; the IK solvers add
+`pin` + `pin-pink` via `pip install -e ".[kinematics]"`. No conda, no
+ROS, no MoveIt. See the [Getting Started](getting-started.md) guide for the
 full development setup (pixi + conda-forge toolchain, URDF rebuilds,
 FK codegen).

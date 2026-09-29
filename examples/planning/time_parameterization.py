@@ -1,6 +1,6 @@
 """Time parameterization: convert a planned path into an executable trajectory.
 
-Demonstrates the default TOPP-RA time-optimal parameterizer. A synthetic
+Demonstrates the TOPP-RA time-optimal parameterizer. A synthetic
 3-DOF zigzag path is parameterized under velocity and acceleration limits,
 then sampled at 100 Hz and printed.
 
@@ -17,7 +17,6 @@ def main(
     vel_limit: float = 1.0,
     acc_limit: float = 2.0,
     dt: float = 0.01,
-    method: str = "toppra",
 ) -> None:
     """Run time parameterization on a synthetic path.
 
@@ -25,7 +24,6 @@ def main(
         vel_limit: Per-joint velocity limit (rad/s or m/s).
         acc_limit: Per-joint acceleration limit (rad/s^2 or m/s^2).
         dt: Sample interval for the output rollout (seconds).
-        method: Time-parameterization backend: ``toppra`` or ``totg``.
     """
     ndof = 3
     path = np.array(
@@ -40,12 +38,7 @@ def main(
     vel_limits = np.full(ndof, vel_limit)
     acc_limits = np.full(ndof, acc_limit)
 
-    param = TimeOptimalParameterizer(
-        vel_limits,
-        acc_limits,
-        max_deviation=0.1,
-        method=method,
-    )
+    param = TimeOptimalParameterizer(vel_limits, acc_limits)
     traj = param.parameterize(path)
 
     print(f"Path: {path.shape[0]} waypoints, {ndof} DOF")

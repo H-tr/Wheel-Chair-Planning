@@ -3,9 +3,7 @@
 Converts a piecewise-linear ``(N, ndof)`` waypoint path — as produced by
 :class:`~wheelchair_planning.planning.MotionPlanner` — into an executable
 :class:`Trajectory` with continuous velocity and bounded acceleration,
-using TOPP-RA by default.  The vendored MoveIt-style Time-Optimal
-Trajectory Generation (TOTG) backend remains available with
-``method="totg"``.
+using TOPP-RA.
 
 Typical use::
 
@@ -21,7 +19,7 @@ time-parameterised by construction and shares the same sampling API.
 """
 
 from .kinodynamic import KinodynamicTrajectory
-from .totg import TimeOptimalParameterizer, parameterize_path
+from .parameterization import TimeOptimalParameterizer, parameterize_path
 from .trajectory import Trajectory
 
 __all__ = [

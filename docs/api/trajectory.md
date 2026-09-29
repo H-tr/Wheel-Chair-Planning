@@ -2,11 +2,11 @@
 
 ## TimeOptimalParameterizer
 
-::: wheelchair_planning.trajectory.totg.TimeOptimalParameterizer
+::: wheelchair_planning.trajectory.parameterization.TimeOptimalParameterizer
 
 ### Convenience function
 
-::: wheelchair_planning.trajectory.totg.parameterize_path
+::: wheelchair_planning.trajectory.parameterization.parameterize_path
 
 ## Trajectory
 
@@ -15,9 +15,3 @@
 ## KinodynamicTrajectory
 
 ::: wheelchair_planning.trajectory.kinodynamic.KinodynamicTrajectory
-
-## Low-level C++ binding
-
-::: wheelchair_planning._time_parameterization.TotgTrajectory
-
-::: wheelchair_planning._time_parameterization.compute_trajectory

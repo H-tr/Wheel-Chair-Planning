@@ -340,8 +340,7 @@ good_goals = goals[mask]
     ---
 
     Convert geometric paths into time-optimal trajectories with
-    per-joint velocity and acceleration limits. TOPP-RA is the default;
-    vendored TOTG is still available as an option.
+    per-joint velocity and acceleration limits, using TOPP-RA.
 
 -   [__Kinodynamic planning__](kinodynamic.md)
 

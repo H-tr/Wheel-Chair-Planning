@@ -1,7 +1,7 @@
 """Tests for the time-parameterization module.
 
-These exercise the public trajectory wrapper and its TOPP-RA/TOTG
-backends.  No robot URDFs or motion planner are needed — we generate
+These exercise the public trajectory wrapper and its TOPP-RA
+backend.  No robot URDFs or motion planner are needed — we generate
 simple synthetic paths in low-dimensional joint space.
 """
 
@@ -48,19 +48,6 @@ class TestParameterizerConstruction:
             max_acceleration=np.ones(3) * 2,
         )
         assert param.num_dof == 3
-        assert param.method == "toppra"
-
-    def test_accepts_totg_method(self):
-        param = TimeOptimalParameterizer(
-            max_velocity=np.ones(3),
-            max_acceleration=np.ones(3) * 2,
-            method="totg",
-        )
-        assert param.method == "totg"
-
-    def test_rejects_unknown_method(self):
-        with pytest.raises(ValueError, match="method"):
-            TimeOptimalParameterizer(np.ones(3), np.ones(3), method="unknown")
 
     def test_rejects_zero_velocity(self):
         with pytest.raises(ValueError, match="strictly positive"):
@@ -73,10 +60,6 @@ class TestParameterizerConstruction:
     def test_rejects_shape_mismatch(self):
         with pytest.raises(ValueError, match="same shape"):
             TimeOptimalParameterizer(np.ones(3), np.ones(4))
-
-    def test_rejects_negative_deviation(self):
-        with pytest.raises(ValueError, match="strictly positive"):
-            TimeOptimalParameterizer(np.ones(3), np.ones(3), max_deviation=-0.1)
 
 
 # ── Parameterization ────────────────────────────────────────────────
@@ -133,16 +116,6 @@ class TestParameterize:
         traj = param.parameterize(path)
         assert traj.duration > 0
 
-    def test_totg_backend_remains_available(self):
-        pytest.importorskip("wheelchair_planning._time_parameterization")
-        param = TimeOptimalParameterizer(
-            max_velocity=np.ones(3),
-            max_acceleration=np.ones(3) * 2,
-            method="totg",
-        )
-        traj = param.parameterize(_zigzag_path(3))
-        assert traj.duration > 0
-
 
 # ── Trajectory queries ───────────────────────────────────────────────
 
@@ -161,8 +134,8 @@ class TestTrajectoryQueries:
         np.testing.assert_allclose(pend, path[-1], atol=1e-6)
 
     def test_velocity_at_start_and_end(self, traj):
-        # Both supported backends start and end at rest. Residual is small
-        # but nonzero due to numerical interpolation inside the backend.
+        # TOPP-RA starts and ends at rest. Residual is small but nonzero
+        # due to numerical interpolation inside the backend.
         v0 = traj.velocity(0.0)
         vend = traj.velocity(traj.duration)
         np.testing.assert_allclose(v0, 0.0, atol=5e-3)
@@ -227,17 +200,5 @@ class TestParameterizePath:
     def test_one_shot(self):
         path = _zigzag_path(3)
         traj = parameterize_path(path, np.ones(3), np.ones(3) * 2)
-        assert isinstance(traj, Trajectory)
-        assert traj.duration > 0
-
-    def test_one_shot_totg_method(self):
-        pytest.importorskip("wheelchair_planning._time_parameterization")
-        path = _zigzag_path(3)
-        traj = parameterize_path(
-            path,
-            np.ones(3),
-            np.ones(3) * 2,
-            method="totg",
-        )
         assert isinstance(traj, Trajectory)
         assert traj.duration > 0

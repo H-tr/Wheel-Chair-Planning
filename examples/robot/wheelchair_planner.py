@@ -138,9 +138,8 @@ class WheelchairPlanner:
     ) -> tuple[np.ndarray, np.ndarray]:
         """Convert a joint-space waypoint path to a time-parameterized trajectory.
 
-        Wraps :class:`wheelchair_planning.trajectory.TimeOptimalParameterizer`,
-        which uses TOPP-RA by default and still supports the legacy
-        MoveIt-style TOTG backend. Per-joint limits default to
+        Wraps :class:`wheelchair_planning.trajectory.TimeOptimalParameterizer`
+        (TOPP-RA). Per-joint limits default to
         ``wheelchair_robot_config.max_velocity`` / ``max_acceleration``.
         """
         path = np.asarray(path, dtype=np.float64)

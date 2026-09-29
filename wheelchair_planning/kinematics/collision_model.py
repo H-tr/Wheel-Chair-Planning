@@ -111,7 +111,7 @@ def add_pointcloud_obstacles(
     Output:
         Number of obstacle spheres added.
     """
-    import hppfcl
+    import coal
 
     points = np.asarray(points, dtype=np.float64)
     if points.ndim != 2 or points.shape[1] != 3:
@@ -126,25 +126,10 @@ def add_pointcloud_obstacles(
     n_added = 0
 
     for i, pt in enumerate(points):
-        sphere = hppfcl.Sphere(radius)
+        sphere = coal.Sphere(radius)
         placement = pin.SE3(np.eye(3), pt)
-        # Pinocchio bindings differ across major versions:
-        #   3.x commonly accepts (name, parent_joint, geometry, placement)
-        #   2.x may require (name, parent_frame, parent_joint, geometry, placement)
-        # Try the concise form first, then fall back.
-        name = f"obstacle_{i}"
         parent_joint = 0  # universe
-        try:
-            geom = pin.GeometryObject(name, parent_joint, sphere, placement)
-        except Exception:
-            parent_frame = 0  # universe frame
-            geom = pin.GeometryObject(
-                name,
-                parent_frame,
-                parent_joint,
-                sphere,
-                placement,
-            )
+        geom = pin.GeometryObject(f"obstacle_{i}", parent_joint, placement, sphere)
         obs_id = context.collision_model.addGeometryObject(geom)
 
         for robot_id in range(n_robot_geoms):

@@ -1,54 +1,35 @@
 [build-system]
 requires = [
-    "scikit-build-core>=0.10",
-    "Cython>=3.0",
-    "numpy",
-    "nanobind>=1.9.2,<2; python_version < '3.9'",
-    "nanobind>=2.0.0; python_version >= '3.9'",
-    "pybind11>=2.10",
+    "scikit-build-core>=0.11",
+    "Cython>=3.1",
+    "numpy>=2",
+    "nanobind>=2.9",
 ]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "wheelchair_planning"
-version = "0.3.4"
+version = "0.4.0"
 description = "Wheelchair planning module"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+]
+# Keep this list minimal: everything here must install from PyPI wheels.
+# TOPP-RA is vendored from third_party/toppra and compiled into our
+# wheels, so only its numpy/scipy runtime deps are listed.
 dependencies = [
-    # TOPP-RA cp39/cp310 wheels are built against NumPy 1.x; importing
-    # them with NumPy 2.x fails in post-install smoke tests.
-    "numpy<2; python_version < '3.11'",
-    "numpy; python_version >= '3.11'",
+    "numpy>=2",
     "scipy",
-    # TOPP-RA is vendored from third_party/toppra and compiled into our
-    # wheels.  Keep its runtime deps explicit now that it is no longer a
-    # PyPI dependency.
-    "matplotlib",
-    # Pure-Python symbolic-FK backend used by SymbolicContext.  Always
-    # installed so pip-only users have a working fallback when
-    # ``pinocchio.casadi`` (the preferred backend) is not present —
-    # ``pinocchio.casadi`` is not available on PyPI for any Python
-    # version, so pip-only installs always end up here.  Conda/pixi
-    # users have ``pinocchio.casadi`` and SymbolicContext picks it
-    # automatically (see wheelchair_planning/planning/symbolic.py).
-    # Pinned ``<1.2`` because urdf2casadi 1.2.0 hard-pins
-    # ``casadi==3.5.5`` and ``numpy<2.0.0``; 1.0.x is unpinned.
-    "urdf2casadi>=1.0,<1.2",
-    # Numeric pinocchio (Stack-Of-Tasks).  Used by every module under
-    # wheelchair_planning.kinematics.  Python <3.10 is excluded because
-    # the current PyPI Stack-Of-Tasks/CMeel dependency stack no longer
-    # provides a complete installable pin/coal wheel set there.
-    "pin; python_version >= '3.10'",
-    # Caron's Pink IK library.  Only needed by the optional Pink IK
-    # solver in wheelchair_planning.kinematics.pink_ik_solver; PyPI
-    # requires Python >=3.10.
-    "pin-pink; python_version >= '3.10'",
-    # Pink solves differential IK through qpsolvers and defaults to OSQP.
-    # qpsolvers itself does not bundle concrete solver backends, so install
-    # OSQP explicitly to keep constrained IK examples working after a plain
-    # editable install (`pip install -e .`).
-    "osqp; python_version >= '3.10'",
+    # Symbolic FK for Constraint / Cost (wheelchair_planning.planning.symbolic).
+    "casadi",
 ]
 
 [project.urls]
@@ -57,7 +38,7 @@ Repository = "https://github.com/H-tr/Wheel-Chair-Planning"
 Issues = "https://github.com/H-tr/Wheel-Chair-Planning/issues"
 
 [tool.scikit-build]
-minimum-version = "0.10"
+minimum-version = "0.11"
 build-dir = "build/{wheel_tag}"
 cmake.build-type = "Release"
 wheel.packages = [
@@ -74,8 +55,8 @@ wheel.license-files = ["third_party/toppra/LICENSE"]
 #   - third_party/ompl sources (compiled from source) minus docs/demos/tests
 #   - third_party/vamp cmake + header-only src (resources/ and build/ are not
 #     needed to compile)
-#   - third_party/toppra Python package + Cython sources used by the default
-#     time-parameterization backend
+#   - third_party/toppra Python package + Cython sources used for time
+#     parameterization
 # Everything else — examples, demos, docs, mkdocs output, repo-level assets,
 # the cricket / foam submodules (used only by scripts, never by the wheel
 # build) — is excluded.
@@ -127,13 +108,15 @@ sdist.exclude = [
 ]
 
 [project.optional-dependencies]
-dev = ["pre-commit", "pybullet", "pytest>=8.0", "trimesh>=4.0"]
-examples = [
-    "casadi",
-    "fire",
-    "matplotlib",
-    "pybullet",
-]
+# wheelchair_planning.kinematics: pinocchio FK / collision model and the
+# Pink IK solver (Pink solves its QPs with OSQP through qpsolvers, which
+# bundles no solver backend itself).  The TRAC-IK solver additionally needs
+# the compiled ``pytracik`` extension, which is only built when orocos-kdl
+# and NLopt are available (e.g. the pixi environment).
+kinematics = ["pin>=3.3", "pin-pink", "osqp"]
+# wheelchair_planning.envs and the example scripts.
+examples = ["fire", "matplotlib", "pybullet", "xmltodict"]
+dev = ["pre-commit", "pytest>=8.0", "trimesh>=4.0"]
 
 # ── cibuildwheel ─────────────────────────────────────────────────────
 # Default Linux wheel target: manylinux_2_34 (AlmaLinux 9) x86_64. AVX2
@@ -144,21 +127,16 @@ examples = [
 # older glibc systems. That path has to provide a newer Boost explicitly:
 # OMPL requires Boost >= 1.68, while EL8 ships Boost 1.66.
 [tool.cibuildwheel]
-# Full supported-Python range: extend this if a new cpython version ships.
-# cp38/cp39 included so the declared ``requires-python = ">=3.8"`` is
-# actually deliverable — the pip-compat workflow builds + tests every
-# entry here in a fresh venv.
-build = "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
-skip = "*-musllinux_* *-win32 *-manylinux_i686 pp*"
+# Full supported-Python range (must match requires-python and the
+# pip-compat / release workflow matrices).
+build = "cp312-* cp313-* cp314-* cp315-*"
+skip = "*-musllinux_* *-win32 *-manylinux_i686 pp* cp3??t-*"
 build-verbosity = 1
 archs = ["x86_64"]
 
 [tool.cibuildwheel.linux]
 manylinux-x86_64-image = "manylinux_2_34"
-# ``patch`` is needed by CMakeLists.txt to apply our carried OMPL fix
-# (cmake/patches/ompl-nanobind-guard.patch).  The manylinux_2_34 image
-# does not ship it by default.
-before-all = "dnf install -y boost-devel eigen3-devel patch"
+before-all = "dnf install -y boost-devel eigen3-devel"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
