@@ -2,11 +2,16 @@
 :class:`Cost`.
 
 Both user-defined constraints and costs build their CasADi expressions
-on top of robot FK.  This module provides :class:`SymbolicContext`
-which wraps either ``pinocchio.casadi`` (preferred — full-feature) or
-``urdf2casadi`` (fallback — pure-Python, no planar base, no Jacobian
-shortcuts) as the backend that turns the subgroup's active joint
-symbol into symbolic link poses.
+on top of robot FK.  This module provides :class:`SymbolicContext`,
+which turns the subgroup's active joint symbol into symbolic link poses
+using a small URDF kinematic-tree walker written directly in CasADi —
+no pinocchio or urdf2casadi needed, so it works from a plain
+``pip install``.
+
+The expressions stay compact for code generation: runs of fixed joints
+are pre-multiplied numerically, joint rotations about coordinate axes
+only emit the non-trivial ``cos``/``sin`` terms, and link poses that
+share a kinematic prefix share the same expression nodes.
 
 The context also owns small filesystem helpers shared across the
 compile pipeline:
@@ -19,24 +24,13 @@ compile pipeline:
 from __future__ import annotations
 
 import os
+import xml.etree.ElementTree as ET
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import casadi as ca
 import numpy as np
-
-try:
-    import pinocchio as pin
-except Exception:  # pragma: no cover - optional runtime dependency
-    pin = None
-try:
-    import pinocchio.casadi as cpin
-except Exception:  # pragma: no cover - optional runtime dependency
-    cpin = None
-try:
-    from urdf2casadi.urdfparser import URDFparser
-except Exception:  # pragma: no cover - optional runtime dependency
-    URDFparser = None
 
 from wheelchair_planning.wheelchair import (
     HOME_JOINTS,
@@ -44,9 +38,13 @@ from wheelchair_planning.wheelchair import (
     wheelchair_robot_config,
 )
 
+# The first three entries of the 10-DOF body vector are the planar base
+# ``[x, y, theta]``, applied as a planar joint at the URDF root link.
+_BASE_DIM = 3
+
 
 def _jit_build_dir() -> Path:
-    """Directory for CasADi/urdf2casadi temporary JIT artifacts."""
+    """Directory for CasADi temporary JIT artifacts."""
     return (Path(__file__).resolve().parents[2] / "build" / "casadi_jit").resolve()
 
 
@@ -61,16 +59,194 @@ def _cwd(path: Path):
         os.chdir(old)
 
 
+# ── URDF kinematic tree ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class _Joint:
+    name: str
+    type: str
+    parent: str
+    origin: np.ndarray  # (4, 4) parent-link -> joint frame
+    axis: np.ndarray  # (3,) unit axis in the joint frame
+
+
+def _rpy_to_matrix(roll: float, pitch: float, yaw: float) -> np.ndarray:
+    """URDF fixed-axis RPY: ``R = Rz(yaw) @ Ry(pitch) @ Rx(roll)``."""
+    cr, sr = np.cos(roll), np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    return np.array(
+        [
+            [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+            [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+            [-sp, cp * sr, cp * cr],
+        ]
+    )
+
+
+def _parse_vec(elem: ET.Element | None, attr: str, default: str) -> np.ndarray:
+    text = default if elem is None else elem.get(attr, default)
+    return np.array([float(v) for v in text.split()], dtype=np.float64)
+
+
+def _parse_urdf(urdf_path: str) -> tuple[dict[str, _Joint], str]:
+    """Return ``{child_link: joint}`` and the name of the root link."""
+    robot = ET.parse(urdf_path).getroot()
+    joints: dict[str, _Joint] = {}
+    for j in robot.findall("joint"):
+        jtype = j.get("type")
+        if jtype not in ("fixed", "revolute", "continuous", "prismatic"):
+            raise ValueError(
+                f"SymbolicContext does not support URDF joint type {jtype!r} "
+                f"(joint {j.get('name')!r})"
+            )
+        if j.find("mimic") is not None:
+            raise ValueError(
+                f"SymbolicContext does not support mimic joints ({j.get('name')!r})"
+            )
+        origin = j.find("origin")
+        T = np.eye(4)
+        T[:3, :3] = _rpy_to_matrix(*_parse_vec(origin, "rpy", "0 0 0"))
+        T[:3, 3] = _parse_vec(origin, "xyz", "0 0 0")
+        axis = _parse_vec(j.find("axis"), "xyz", "1 0 0")
+        child = j.find("child").get("link")
+        joints[child] = _Joint(
+            name=j.get("name"),
+            type=jtype,
+            parent=j.find("parent").get("link"),
+            origin=T,
+            axis=axis / np.linalg.norm(axis),
+        )
+
+    links = [link.get("name") for link in robot.findall("link")]
+    roots = [name for name in links if name not in joints]
+    if len(roots) != 1:
+        raise ValueError(f"URDF must have exactly one root link, found {roots}")
+    return joints, roots[0]
+
+
+def _lin(terms: list[tuple[float, object]]):
+    """Sum ``coef * value`` terms, skipping zero and unit coefficients."""
+    out = 0.0
+    for coef, value in terms:
+        if abs(coef) < 1e-15:
+            continue
+        term = value if coef == 1.0 else -value if coef == -1.0 else coef * value
+        out = term if isinstance(out, float) and out == 0.0 else out + term
+    return out
+
+
+def _axis_rotation(axis: np.ndarray, c, s) -> ca.SX:
+    """Rotation by angle ``(c, s) = (cos, sin)`` about a unit ``axis``.
+
+    Written as ``a a^T + c (I - a a^T) + s [a]_x`` with numeric
+    coefficients, so an axis-aligned joint yields exactly the classic
+    sparse rotation (e.g. ``[[c, -s, 0], [s, c, 0], [0, 0, 1]]``).
+    """
+    aat = np.outer(axis, axis)
+    skew = np.array(
+        [[0.0, -axis[2], axis[1]], [axis[2], 0.0, -axis[0]], [-axis[1], axis[0], 0.0]]
+    )
+    R = ca.SX(3, 3)
+    for i in range(3):
+        for j in range(3):
+            R[i, j] = _lin(
+                [(aat[i, j], 1.0), (float(i == j) - aat[i, j], c), (skew[i, j], s)]
+            )
+    return R
+
+
+def _compose(T_sym: ca.SX, T_const: np.ndarray) -> ca.SX:
+    """``T_sym @ T_const`` for homogeneous transforms (constant on the right)."""
+    out = ca.SX.eye(4)
+    for i in range(3):
+        for j in range(4):
+            terms = [(T_const[k, j], T_sym[i, k]) for k in range(3)]
+            if j == 3:
+                terms.append((1.0, T_sym[i, 3]))
+            out[i, j] = _lin(terms)
+    return out
+
+
+class _Pose:
+    """Symbolic link pose with pinocchio-SE3-like ``translation``/``rotation``."""
+
+    def __init__(self, T: ca.SX) -> None:
+        self.homogeneous = T
+        self.translation = T[:3, 3]
+        self.rotation = T[:3, :3]
+
+
+class _TreeFK:
+    """Memoised symbolic FK over the URDF tree for one joint vector."""
+
+    def __init__(
+        self,
+        joints: dict[str, _Joint],
+        root: str,
+        joint_values: dict[str, object],
+        base: tuple[object, object, object],
+    ) -> None:
+        self._joints = joints
+        self._values = joint_values
+        x, y, theta = base
+        c, s = ca.cos(theta), ca.sin(theta)
+        T_root = ca.SX.eye(4)
+        T_root[:3, :3] = _axis_rotation(np.array([0.0, 0.0, 1.0]), c, s)
+        T_root[0, 3] = x
+        T_root[1, 3] = y
+        # Each entry is (symbolic prefix, pending constant suffix): chains
+        # of fixed joints only grow the numeric suffix, so they cost no
+        # symbolic operations until a moving joint (or a query) needs them.
+        self._cache: dict[str, tuple[ca.SX, np.ndarray]] = {root: (T_root, np.eye(4))}
+
+    def _factored(self, link: str) -> tuple[ca.SX, np.ndarray]:
+        hit = self._cache.get(link)
+        if hit is not None:
+            return hit
+        if link not in self._joints:
+            raise ValueError(f"Unknown link: {link!r}")
+        joint = self._joints[link]
+        T_sym, T_const = self._factored(joint.parent)
+        T_const = T_const @ joint.origin
+        if joint.type != "fixed":
+            if joint.name not in self._values:
+                raise ValueError(
+                    f"Joint {joint.name!r} on the chain to {link!r} is not in "
+                    "the robot's planning joint list."
+                )
+            q = self._values[joint.name]
+            T_sym = _compose(T_sym, T_const)
+            T_joint = ca.SX.eye(4)
+            if joint.type == "prismatic":
+                for i in range(3):
+                    T_joint[i, 3] = _lin([(joint.axis[i], q)])
+            else:
+                T_joint[:3, :3] = _axis_rotation(joint.axis, ca.cos(q), ca.sin(q))
+            T_sym = ca.mtimes(T_sym, T_joint)
+            T_const = np.eye(4)
+        self._cache[link] = (T_sym, T_const)
+        return T_sym, T_const
+
+    def pose(self, link: str) -> _Pose:
+        T_sym, T_const = self._factored(link)
+        return _Pose(_compose(T_sym, T_const))
+
+
+# ── Public context ───────────────────────────────────────────────────
+
+
 class SymbolicContext:
     """CasADi-friendly view of the planner's active subgroup.
 
     Holds the CasADi symbolic joint vector ``q`` matching the subgroup's
-    active dimension, plus a ``pinocchio.casadi`` model for symbolic FK.
+    active dimension and builds symbolic link poses from the robot URDF.
 
     The context hides the planar-root encoding (the 10-DOF body vector
-    uses ``[x, y, theta, j0..j6]``; pinocchio uses
-    ``[x, y, cos(theta), sin(theta), j0..j6]``) and the mapping from
-    the active subspace back to the full 10-DOF body via ``base_config``.
+    uses ``[x, y, theta, j0..j6]``, with the base applied as a planar
+    joint at the URDF root link) and the mapping from the active
+    subspace back to the full 10-DOF body via ``base_config``.
     """
 
     def __init__(
@@ -100,150 +276,33 @@ class SymbolicContext:
             self.active_indices = [full_names.index(j) for j in self.active_names]
 
         self.q = ca.SX.sym("q", len(self.active_indices))
-        self._full_names = list(wheelchair_robot_config.joint_names)
-        self._root_link = "Link_Zero_Point"
-        self._uses_planar_base = any(
-            n in {"Joint_Virtual_X", "Joint_Virtual_Y", "Joint_Virtual_Theta"}
-            for n in self.active_names
-        )
+        self._full_names = full_names
+        self._joints, self._root_link = _parse_urdf(wheelchair_robot_config.urdf_path)
+        self._fk = self._build_fk(self.q)
+        self._numeric_fk: dict[str, ca.Function] = {}
 
-        self._fk_cache: dict[str, dict[str, object]] = {}
-
-        if pin is not None and cpin is not None:
-            self._backend = "pinocchio"
-            # Numeric + symbolic pinocchio models with planar root.
-            self.pin_model = pin.buildModelFromUrdf(
-                wheelchair_robot_config.urdf_path, pin.JointModelPlanar()
-            )
-            self.pin_data = self.pin_model.createData()
-            self.cmodel = cpin.Model(self.pin_model)
-            self.cdata = self.cmodel.createData()
-
-            # Build the symbolic mapping q_active -> pinocchio q (nq=11).
-            self.q_pin = self._build_pinocchio_q(self.q)
-
-            # Pre-run symbolic FK so users can access frame transforms.
-            cpin.forwardKinematics(self.cmodel, self.cdata, self.q_pin)
-            cpin.updateFramePlacements(self.cmodel, self.cdata)
-        elif URDFparser is not None:
-            if self._uses_planar_base:
-                raise RuntimeError(
-                    "SymbolicContext fallback backend (urdf2casadi) does not support "
-                    "planar base symbolic joints (Joint_Virtual_X/Y/Theta). "
-                    "Install pinocchio + pinocchio.casadi for base-enabled groups."
-                )
-            self._backend = "urdf2casadi"
-            self._urdf_parser = URDFparser()
-            self._urdf_parser.from_file(wheelchair_robot_config.urdf_path)
-            # Root the FK at the URDF's actual root link (the link with no
-            # parent). wheelchair.urdf roots at ``base_link``; detecting it
-            # keeps this robust if the runtime URDF changes.
-            try:
-                desc = self._urdf_parser.robot_desc
-                roots = [n for n in desc.link_map if n not in desc.parent_map]
-                self._root_link = roots[0] if roots else "base_link"
-            except Exception:
-                self._root_link = "base_link"
-        else:
-            raise ModuleNotFoundError(
-                "SymbolicContext requires either pinocchio.casadi or urdf2casadi. "
-                "Install one of these backends."
-            )
-
-    def _build_pinocchio_q(self, q_active: ca.SX) -> ca.SX:
-        """Map active-dim symbol to pinocchio q (nq=11)."""
-        full: list[ca.SX | ca.DM] = [ca.DM(float(v)) for v in self.base_config]
-        for i, idx in enumerate(self.active_indices):
-            full[idx] = q_active[i]
-        # full is 10 entries: [x, y, theta, j0..j6]
-        pin_q = ca.vertcat(
-            full[0],
-            full[1],
-            ca.cos(full[2]),
-            ca.sin(full[2]),
-            *full[3:],
-        )
-        return pin_q
-
-    def _build_full_q(self, q_active: ca.SX) -> list[ca.SX | ca.DM]:
-        """Map active subgroup symbols onto full 10-DOF joint vector."""
-        full: list[ca.SX | ca.DM] = [ca.DM(float(v)) for v in self.base_config]
+    def _build_full_q(self, q_active: ca.SX) -> list[ca.SX | float]:
+        """Map active subgroup symbols onto the full 10-DOF joint vector."""
+        full: list[ca.SX | float] = [float(v) for v in self.base_config]
         for i, idx in enumerate(self.active_indices):
             full[idx] = q_active[i]
         return full
 
-    def _urdf2casadi_pose(self, link_name: str, q_active: ca.SX):
-        """Return symbolic link pose using urdf2casadi backend."""
-        if link_name == self._root_link:
-            T_expr = ca.SX.eye(4)
-        else:
-            cache = self._fk_cache.get(link_name)
-            if cache is None:
-                jit_dir = _jit_build_dir()
-                jit_dir.mkdir(parents=True, exist_ok=True)
-                with _cwd(jit_dir):
-                    fk = self._urdf_parser.get_forward_kinematics(
-                        self._root_link, link_name
-                    )
-                cache = {
-                    "T_fk": fk["T_fk"],
-                    "q_fk": fk["q"],
-                    "joint_names": list(fk["joint_names"]),
-                }
-                # NOTE: we deliberately do NOT numerically "warm up" T_fk here.
-                # A numeric call would force CasADi's shell JIT to compile the
-                # FK to a .so; with this robot that .so picks up auto-vectorized
-                # libmvec symbols (e.g. _ZGVbN2v_cos) and fails to load in
-                # minimal pip-only environments (manylinux test venvs) — an
-                # uncatchable dynamic-loader crash. We only ever use T_fk
-                # SYMBOLICALLY below (``T_fk(q_sub_expr)``), which never
-                # compiles, so the warm-up is both unnecessary and unsafe here.
-                self._fk_cache[link_name] = cache
+    def _build_fk(self, q_active: ca.SX) -> _TreeFK:
+        full = self._build_full_q(q_active)
+        values = dict(zip(self._full_names[_BASE_DIM:], full[_BASE_DIM:]))
+        return _TreeFK(self._joints, self._root_link, values, tuple(full[:_BASE_DIM]))
 
-            full = self._build_full_q(q_active)
-            q_sub = []
-            for joint_name in cache["joint_names"]:
-                if joint_name not in self._full_names:
-                    raise ValueError(
-                        f"Joint {joint_name!r} from URDF chain is not in full joint list."
-                    )
-                q_sub.append(full[self._full_names.index(joint_name)])
-            q_sub_expr = ca.vertcat(*q_sub) if q_sub else ca.SX([])
-            T_fk = cache["T_fk"]
-            if isinstance(T_fk, ca.Function):
-                T_expr = T_fk(q_sub_expr)
-            else:
-                T_expr = ca.substitute(T_fk, cache["q_fk"], q_sub_expr)
+    def link_pose(self, link_name: str, q_active: ca.SX | None = None) -> _Pose:
+        """Return the symbolic world pose of a URDF link.
 
-        class _Pose:
-            def __init__(self, T):
-                self.translation = T[:3, 3]
-                self.rotation = T[:3, :3]
-
-        return _Pose(T_expr)
-
-    def link_pose(self, link_name: str, q_active: ca.SX | None = None):
-        """Return the symbolic pinocchio SE3 of a URDF link.
-
-        Pass ``q_active=self.q`` (or omit) to get an expression that
-        depends on the active joints symbolically.
+        The result exposes ``translation`` (3x1) and ``rotation`` (3x3)
+        CasADi expressions.  Pass ``q_active=self.q`` (or omit) to get
+        an expression that depends on the active joints symbolically.
         """
-        if self._backend == "pinocchio":
-            if q_active is None or q_active is self.q:
-                frame_id = self.cmodel.getFrameId(link_name)
-                return self.cdata.oMf[frame_id]
-            # Rebuild with a different symbol.
-            cdata = self.cmodel.createData()
-            q_pin = self._build_pinocchio_q(q_active)
-            cpin.forwardKinematics(self.cmodel, cdata, q_pin)
-            cpin.updateFramePlacement(
-                self.cmodel, cdata, self.cmodel.getFrameId(link_name)
-            )
-            return cdata.oMf[self.cmodel.getFrameId(link_name)]
-
-        # urdf2casadi fallback
-        q_eval = self.q if q_active is None else q_active
-        return self._urdf2casadi_pose(link_name, q_eval)
+        if q_active is None or q_active is self.q:
+            return self._fk.pose(link_name)
+        return self._build_fk(q_active).pose(link_name)
 
     def link_translation(self, link_name: str, q_active: ca.SX | None = None) -> ca.SX:
         """Symbolic 3-vector: link position in world frame."""
@@ -256,41 +315,15 @@ class SymbolicContext:
     def evaluate_link_pose(
         self, link_name: str, q_active_numeric: np.ndarray
     ) -> np.ndarray:
-        """Compute a NUMERIC 4x4 link pose (handy for building targets).
-
-        Uses the numeric pinocchio model, not the symbolic one, so it is
-        fast and has no dependence on CasADi expressions.
-        """
-        if self._backend == "pinocchio":
-            full = self.base_config.copy()
-            for i, idx in enumerate(self.active_indices):
-                full[idx] = q_active_numeric[i]
-            q = np.empty(int(self.pin_model.nq))
-            q[0] = full[0]
-            q[1] = full[1]
-            q[2] = np.cos(full[2])
-            q[3] = np.sin(full[2])
-            q[4:] = full[3:]
-            pin.forwardKinematics(self.pin_model, self.pin_data, q)
-            pin.updateFramePlacement(
-                self.pin_model,
-                self.pin_data,
-                self.pin_model.getFrameId(link_name),
+        """Compute a NUMERIC 4x4 link pose (handy for building targets)."""
+        fn = self._numeric_fk.get(link_name)
+        if fn is None:
+            fn = ca.Function(
+                f"fk_{link_name}", [self.q], [self.link_pose(link_name).homogeneous]
             )
-            pose = self.pin_data.oMf[self.pin_model.getFrameId(link_name)]
-            M = np.eye(4)
-            M[:3, :3] = pose.rotation
-            M[:3, 3] = pose.translation
-            return M
-
-        # urdf2casadi fallback
-        T = self._urdf2casadi_pose(link_name, self.q)
-        T_fn = ca.Function("fk_eval", [self.q], [T.rotation, T.translation])
-        rot_num, trans_num = T_fn(np.asarray(q_active_numeric, dtype=np.float64))
-        M = np.eye(4)
-        M[:3, :3] = np.asarray(rot_num, dtype=np.float64)
-        M[:3, 3] = np.asarray(trans_num, dtype=np.float64).reshape(-1)
-        return M
+            self._numeric_fk[link_name] = fn
+        q = np.asarray(q_active_numeric, dtype=np.float64).reshape(-1)
+        return np.asarray(fn(q), dtype=np.float64)
 
     def project(
         self,

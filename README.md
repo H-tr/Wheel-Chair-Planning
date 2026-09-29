@@ -22,7 +22,8 @@ mobile manipulator (a 3-DOF planar wheelchair base + a 7-DOF xArm7 arm).
 
 - **Inverse Kinematics** — TRAC-IK (unconstrained) and Pink (QP-based constrained) solvers with self-collision avoidance and camera/orientation stabilization
 - **Motion Planning** — VAMP-based planner with collision checking, path validation, and subgroup planning (arm-only, base-only, and whole-body)
-- **Time Parameterization** — TOPP-RA by default, with legacy TOTG available; converts planned paths into executable trajectories with velocity/acceleration limits
+- **Time Parameterization** — TOPP-RA; converts planned paths into executable trajectories with velocity/acceleration limits
+- **Kinodynamic Planning** — FLASK (flatness-based kinodynamic RRT-Connect) plans time-parameterised trajectories directly, with joint/base velocity and acceleration limits and an exactly nonholonomic diff-drive base
 - **Collision Geometry** — Spherized URDF representations for efficient collision detection, with pointcloud obstacle support
 
 ## Robot
@@ -36,15 +37,18 @@ mobile manipulator (a 3-DOF planar wheelchair base + a 7-DOF xArm7 arm).
 
 ## Quick Start
 
-**Platform**: Linux, Python 3.11+ (see `pixi.toml`).
+**Platform**: Linux x86_64 (AVX2), Python 3.12–3.14.
 
 For inference — running the planners and IK solvers — pip install:
 
 ```bash
 git clone --recursive https://github.com/H-tr/Wheel-Chair-Planning.git
 cd Wheel-Chair-Planning
-pip install -e .
+pip install -e ".[kinematics]"   # core deps: numpy, scipy, casadi
 ```
+
+The `kinematics` extra adds `pin` + `pin-pink` for the IK solvers; drop it
+if you only need motion planning and time parameterization.
 
 For development — rebuilding URDFs, regenerating FK headers, running the C++
 toolchain end-to-end — use the setup script, which installs pixi and the
@@ -67,6 +71,9 @@ pixi run python examples/planning/subgroup.py
 
 # Time parameterization
 pixi run python examples/planning/time_parameterization.py
+
+# Kinodynamic planning (FLASK): drive to a table, then reach over it
+pixi run python examples/planning/kinodynamic.py
 
 # Tests
 pixi run -e dev test
@@ -91,7 +98,7 @@ pixi run build-pkg          # compile the C++ extensions
 wheelchair_planning/   # Core Python package
   kinematics/          # TRAC-IK + Pink IK, FK, collision checking
   planning/            # VAMP motion planning, cost + constrained planners
-  trajectory/          # TOPP-RA / TOTG time parameterization
+  trajectory/          # TOPP-RA time parameterization
   envs/                # Simulation environments (PyBullet)
   types/               # Shared dataclasses (Pose, JointState, ...)
   resources/           # Packaged URDFs and asset loaders
@@ -101,7 +108,7 @@ third_party/
   cricket/             # FK code generator (submodule)
   foam/                # Collision geometry / spherization (submodule)
   toppra/              # Time-optimal path parameterization (submodule)
-ext/                   # C++ extensions (ompl_vamp, trac_ik, time_parameterization)
+ext/                   # C++ extensions (ompl_vamp, trac_ik)
 assets/
   wheelchair_xarm_description/   # Raw robot description (submodule)
 examples/              # IK, planning, demos
@@ -118,8 +125,7 @@ architecture:
 
 - **[VAMP](https://github.com/KavrakiLab/vamp)** — SIMD-accelerated motion planning and collision checking (KavrakiLab, Rice University).
 - **[OMPL](https://ompl.kavrakilab.org/)** — The Open Motion Planning Library (KavrakiLab, Rice University).
-- **[TOPP-RA](https://github.com/hungpham2511/toppra)** — Reachability-analysis-based time-optimal path parameterization, used as the default timing backend.
-- **[MoveIt 2](https://github.com/moveit/moveit2)** — The vendored TOTG implementation in `ext/time_parameterization/` is adapted from MoveIt 2's `trajectory_processing` module (Tobias Kunz and Mike Stilman, Georgia Tech). See `ext/time_parameterization/LICENSE.TOTG`.
+- **[TOPP-RA](https://github.com/hungpham2511/toppra)** — Reachability-analysis-based time-optimal path parameterization, used for time parameterization.
 - **[TRAC-IK](https://traclabs.com/projects/trac-ik/)** — Inverse kinematics solver (TRACLabs).
 - **[wheelchair_xarm_description](https://github.com/soibkhon/wheelchair_xarm_description)** — The robot description (URDF + meshes).
 ```

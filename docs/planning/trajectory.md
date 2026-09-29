@@ -25,23 +25,24 @@ are respected, and the trajectory is as fast as physically possible.
     The output trajectory never exceeds them (up to the integrator's
     numerical tolerance).
 
--   __Backend options__
+-   __Smooth through every waypoint__
 
     ---
 
-    TOPP-RA is the default. The vendored MoveIt-style TOTG backend is
-    still available for comparison or compatibility with older scripts.
+    TOPP-RA times a cubic spline through the planned waypoints, so the
+    trajectory has continuous velocity instead of stop-go corners.
 
 </div>
 
 ## Algorithm
 
-The default implementation is **TOPP-RA** (Time-Optimal Path
-Parameterization by Reachability Analysis). It computes a feasible
+The implementation is **TOPP-RA** (Time-Optimal Path
+Parameterization by Reachability Analysis), vendored from
+`third_party/toppra` and compiled into the wheel. It computes a feasible
 velocity profile along a smooth geometric path while respecting
 per-joint velocity and acceleration bounds.
 
-The default flow works in two stages:
+It works in two stages:
 
 1. **Spline path through waypoints** — the waypoint path is represented
    as a natural cubic spline using chord-length parameterization. This
@@ -58,12 +59,6 @@ acceleration that starts and ends at rest.
     between waypoints. Keep the planned waypoint path dense enough for
     your clearance, and collision-check the sampled trajectory when
     operating near obstacles.
-
-!!! note "Legacy TOTG"
-
-    Pass `method="totg"` to use the vendored Kunz-Stilman / MoveIt-style
-    Time-Optimal Trajectory Generation backend. TOTG uses circular blends
-    at corners, controlled by `max_deviation`.
 
 ## Minimal example
 
@@ -103,9 +98,6 @@ times, positions, velocities, accelerations = traj.sample_uniform(dt=0.01)
 |---|---|---|
 | `max_velocity` | *(required)* | `(ndof,)` per-joint velocity limit (rad/s or m/s) |
 | `max_acceleration` | *(required)* | `(ndof,)` per-joint acceleration limit |
-| `method` | `"toppra"` | Backend: `"toppra"` (default) or `"totg"` |
-| `max_deviation` | `0.1` | TOTG-only radial blend tolerance at corners. Larger = faster cornering, but the trajectory deviates more from the original waypoints. |
-| `time_step` | `1e-3` | TOTG-only forward-integration step along the path arc length. Smaller = more accurate, slower. |
 | `velocity_scaling` | `1.0` | Scale factor in `(0, 1]` applied to `max_velocity`. Use to slow the trajectory without changing the stored limits. |
 | `acceleration_scaling` | `1.0` | Scale factor in `(0, 1]` applied to `max_acceleration`. |
 

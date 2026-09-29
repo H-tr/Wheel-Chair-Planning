@@ -1,16 +1,12 @@
 """TOPP-RA time-parameterization backend.
 
-The public trajectory API is intentionally shared with the C++ TOTG backend:
-this module returns a small handle with ``duration``, point sampling, and batch
-sampling methods so :class:`wheelchair_planning.trajectory.Trajectory` can wrap
-either implementation without callers changing code.
+Returns a small handle with ``duration``, point sampling, and batch sampling
+methods that :class:`wheelchair_planning.trajectory.Trajectory` wraps, so
+callers only ever see plain NumPy arrays.
 """
 
 from __future__ import annotations
 
-import os
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -98,8 +94,6 @@ def compute_toppra_trajectory(
 ) -> ToppraTrajectoryHandle | None:
     """Compute a TOPP-RA trajectory through joint-space waypoints."""
 
-    _prepare_matplotlib_cache()
-
     try:
         import toppra as ta
         import toppra.algorithm as toppra_algorithm
@@ -145,13 +139,3 @@ def _chord_length_positions(waypoints: np.ndarray) -> np.ndarray:
     if positions[-1] <= 0.0:
         raise ValueError("path must contain at least two distinct waypoints")
     return positions
-
-
-def _prepare_matplotlib_cache() -> None:
-    """Avoid noisy matplotlib cache warnings from toppra imports."""
-
-    if "MPLCONFIGDIR" in os.environ:
-        return
-    cache_dir = Path(tempfile.gettempdir()) / "wheelchair-planning-matplotlib"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["MPLCONFIGDIR"] = str(cache_dir)

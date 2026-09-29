@@ -8,10 +8,9 @@ Covered:
 
 - Every public sub-package imports cleanly (types, wheelchair, planning,
   trajectory, utils).
-- Each native extension loads (``_ompl_vamp``, ``_time_parameterization``).
-- The default TOPP-RA time-parameterization backend runs.
-- The FK backend that ``SymbolicContext`` relies on is usable (pinocchio
-  OR urdf2casadi).
+- The native planner extension (``_ompl_vamp``) loads.
+- The vendored TOPP-RA time parameterization runs.
+- ``SymbolicContext`` builds symbolic FK (pure CasADi, no pinocchio).
 - A single end-to-end plan + time-parameterize round-trip succeeds.
 """
 
@@ -51,8 +50,8 @@ def test_wheelchair_robot_config_populated():
 # ── native extensions ────────────────────────────────────────────────
 
 
-def test_default_time_parameterizer_runs():
-    """Default TOPP-RA backend must parameterize a tiny path."""
+def test_time_parameterizer_runs():
+    """Vendored TOPP-RA (incl. its Cython extensions) must parameterize a tiny path."""
     from wheelchair_planning.trajectory import TimeOptimalParameterizer
 
     path = np.array([[0.0, 0.0], [0.5, 0.3], [1.0, 0.6]])
@@ -64,19 +63,10 @@ def test_default_time_parameterizer_runs():
     assert traj.duration > 0.0
 
 
-def test_trajectory_extension_loads_and_runs():
-    """Native ``_time_parameterization`` must still support the TOTG method."""
-    pytest.importorskip("wheelchair_planning._time_parameterization")
-    from wheelchair_planning.trajectory import TimeOptimalParameterizer
-
-    path = np.array([[0.0, 0.0], [0.5, 0.3], [1.0, 0.6]])
-    param = TimeOptimalParameterizer(
-        max_velocity=np.ones(2),
-        max_acceleration=np.ones(2) * 2.0,
-        method="totg",
-    )
-    traj = param.parameterize(path)
-    assert traj.duration > 0.0
+def test_toppra_extensions_load():
+    """The Cython extensions compiled into our wheel for TOPP-RA must load."""
+    from toppra import _CythonUtils  # noqa: F401
+    from toppra.solverwrapper import cy_seidel_solverwrapper  # noqa: F401
 
 
 def test_planner_extension_loads():
@@ -91,28 +81,11 @@ def test_planner_extension_loads():
     assert planner is not None
 
 
-# ── symbolic FK backend ──────────────────────────────────────────────
+# ── symbolic FK ──────────────────────────────────────────────────────
 
 
-def test_symbolic_context_backend_available():
-    """Either pinocchio.casadi or urdf2casadi must be importable post-install."""
-    import wheelchair_planning.planning.symbolic as sym
-
-    if sym.pin is None and sym.URDFparser is None:
-        errors = {}
-        for name in ("pinocchio", "pinocchio.casadi", "urdf2casadi"):
-            try:
-                __import__(name)
-                errors[name] = "(import succeeded — symbolic.py state stale?)"
-            except Exception as exc:  # noqa: BLE001 - we want the full reason
-                errors[name] = f"{type(exc).__name__}: {exc}"
-        pytest.fail(
-            "No FK backend usable from SymbolicContext. Re-import results:\n"
-            + "\n".join(f"  {name}: {msg}" for name, msg in errors.items())
-            + "\n\nFix: ``pip install pin`` (preferred) or "
-            "``pip install urdf2casadi`` (fallback)."
-        )
-
+def test_symbolic_context_builds_fk():
+    """SymbolicContext needs only casadi (no pinocchio) to build symbolic FK."""
     from wheelchair_planning.planning import SymbolicContext
 
     ctx = SymbolicContext("wheelchair_arm")

@@ -5,7 +5,7 @@ platforms = ["linux-64"]
 [pypi-dependencies]
 wheelchair_planning = { path = ".", editable = true }
 foam = { path = "./third_party/foam", editable = true }
-coacd = "*"
+coacd = ">=1.0.14, <2"
 
 [environments]
 default = { solve-group = "default" }
@@ -15,16 +15,9 @@ dev = { features = ["dev"], solve-group = "default" }
 env = { PYTHONPATH = "" }
 
 [tasks]
-# cricket's fkcc_gen.cc uses fmt::format but only includes <fmt/core.h>; in
-# fmt >= 11 that symbol lives in <fmt/format.h>. scripts/patch_submodules.sh
-# rewrites the include in the pinned submodule's working tree (idempotent;
-# the commit pin is unchanged) — same approach as the carried OMPL patch.
-cricket-configure = "bash scripts/patch_submodules.sh && cmake -GNinja -S third_party/cricket -B third_party/cricket/build"
+cricket-configure = "cmake -GNinja -S third_party/cricket -B third_party/cricket/build -DCRICKET_BUILD_JIT=OFF"
 cricket-build = { cmd = "cmake --build third_party/cricket/build", depends-on = ["cricket-configure"] }
-# foam's CompilerSettings.cmake hardcodes -flto in the Release flags; the bundled
-# spheretree static archive then fails to link under gcc 14 LTO. Append -fno-lto
-# (last flag wins) to disable it without touching the submodule.
-foam-configure = "cmake -GNinja -S third_party/foam -B third_party/foam/build -DCMAKE_CXX_FLAGS_RELEASE=-fno-lto -DCMAKE_C_FLAGS_RELEASE=-fno-lto"
+foam-configure = "cmake -GNinja -S third_party/foam -B third_party/foam/build"
 foam-build = { cmd = "cmake --build third_party/foam/build", depends-on = ["foam-configure"] }
 build-robot = { cmd = "bash scripts/build_robot.sh", depends-on = ["foam-build"] }
 decompose-robot = { cmd = "bash scripts/decompose_robot.sh", depends-on = ["build-robot"] }
@@ -34,50 +27,50 @@ build-pkg = "python -m build --wheel --no-isolation --skip-dependency-check --ou
 render-docs-videos = "python scripts/render_videos/render_docs_videos.py"
 
 [dependencies]
-cmake = ">=4.2.3,<5"
+cmake = ">=4.4.3,<5"
 ninja = ">=1.13.2,<2"
-cxx-compiler = ">=1.11.0,<2"
+cxx-compiler = ">=2.0.0,<3"
 pkg-config = ">=0.29.2,<0.30"
-git = ">=2.53.0,<3"
-patch = ">=2.8,<3"
-python = ">=3.11,<3.13"
-pybind11 = ">=3.0.2,<4"
-libboost-devel = "*"
-orocos-kdl = ">=1.5.3,<2"
-eigen = ">=3.4.0,<4"
-nlopt = ">=2.10.0,<3"
-pinocchio = ">=3.9.0,<4"
-pink = ">=4.1.0,<5"
+git = ">=2.55.0,<3"
+python = ">=3.14.7,<3.15"
+numpy = ">=2.5.3,<3"
+pybind11 = ">=3.1.0,<4"
+libboost-devel = ">=1.90.0,<2"
+orocos-kdl = ">=1.5.4,<2"
+eigen = ">=5.0.1,<6"
+nlopt = ">=2.11.0,<3"
+pinocchio = ">=4.1.0,<5"
+pink = ">=4.4.0,<5"
 cppad = ">=20260000.0,<20260001"
 cgal = ">=6.0.1,<7"
 inja = ">=3.5.0,<4"
 nlohmann_json = ">=3.12.0,<4"
 fmt = ">=12.1.0,<13"
-llvm = ">=22.1.0,<23"
+llvm = ">=23.1.2,<24"
 fire = ">=0.7.1,<0.8"
 xmltodict = ">=1.0.4,<2"
 pymeshlab = ">=2025.7.post1,<2026"
-pip = ">=26.0.1,<27"
-python-build = ">=1.2.2,<2"
-scikit-build-core = ">=0.4.3"
-nanobind = ">=2.0.0"
-cython = ">=3.0,<4"
-twine = ">=6.2.0,<7"
+pip = ">=26.2.1,<27"
+python-build = ">=1.6.1,<2"
+scikit-build-core = ">=1.1.0,<2"
+nanobind = ">=3.1.0,<4"
+cython = ">=3.3.0,<4"
+twine = ">=7.0.0,<8"
 pybullet = ">=3.25,<4"
 casadi = ">=3.7.2,<4"
-matplotlib = ">=3.10.0,<4"
-pre-commit = ">=4.5.1,<5"
+matplotlib = ">=3.11.2,<4"
+pre-commit = ">=4.6.2,<5"
 
 [feature.dev.pypi-dependencies]
 pre-commit = "*"
 pybullet = "*"
-mkdocs-material = "*"
-mkdocstrings = { version = "*", extras = ["python"] }
+mkdocs-material = ">=9.7.7, <10"
+mkdocstrings = { version = ">=1.0.6, <2", extras = ["python"] }
 
 [feature.dev.dependencies]
-pytest = ">=8.0,<9"
-trimesh = ">=4.0"
-coverage = ">=7.13.5,<8"
+pytest = ">=9.1.1,<10"
+trimesh = ">=5.1.0,<6"
+coverage = ">=7.16.2,<8"
 pytest-cov = ">=7.1.0,<8"
 
 [feature.dev.tasks]

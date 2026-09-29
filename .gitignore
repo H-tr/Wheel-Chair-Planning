@@ -260,3 +260,6 @@ resources/robot/wheelchair/wheelchair_*_spherized.urdf
 
 # Local scratch (crane build scripts, logs, reference clone) — never committed
 .scratch/
+
+# Local renderings and debugging scratch (never committed)
+debug/

@@ -221,7 +221,7 @@ def test_pinocchio_context_rejects_unknown_frame():
 @pytest.fixture(scope="module")
 def collision_ctx():
     pytest.importorskip("pinocchio")
-    pytest.importorskip("hppfcl")
+    pytest.importorskip("coal")
     from wheelchair_planning.kinematics import build_collision_model
     from wheelchair_planning.wheelchair import CHAIN_CONFIGS
 

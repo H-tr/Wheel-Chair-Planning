@@ -1,7 +1,7 @@
 name: pip install compatibility
 
-# Verifies that ``pip install wheelchair_planning[dev,examples]`` gives
-# users a working package on every supported Python version.
+# Verifies that ``pip install wheelchair_planning[dev,examples,kinematics]``
+# gives users a working package on every supported Python version.
 #
 # Each matrix entry:
 #   1. Builds the manylinux wheel via cibuildwheel (same toolchain
@@ -37,58 +37,54 @@ jobs:
       matrix:
         # Every cpython version in the cibuildwheel build matrix must
         # appear here; keep the two lists in sync.
-        python: ["38", "39", "310", "311", "312", "313"]
+        python: ["312", "313", "314", "315"]
         manylinux:
           - image: manylinux_2_34
             platform: manylinux_2_34_x86_64
-            before_all: dnf install -y boost-devel eigen3-devel patch
+            before_all: dnf install -y boost-devel eigen3-devel
             environment: ""
           - image: manylinux_2_28
             platform: manylinux_2_28_x86_64
             before_all: >-
-              dnf install -y curl eigen3-devel patch &&
+              dnf install -y curl eigen3-devel &&
               curl -fsSL https://archives.boost.io/release/1.82.0/source/boost_1_82_0.tar.gz -o /tmp/boost_1_82_0.tar.gz &&
               tar -xzf /tmp/boost_1_82_0.tar.gz -C /tmp &&
               cd /tmp/boost_1_82_0 &&
-              ./bootstrap.sh --prefix=/opt/boost-1.82.0 --with-libraries=serialization,filesystem,system,program_options &&
+              ./bootstrap.sh --prefix=/opt/boost-1.82.0 --with-libraries=serialization,program_options &&
               ./b2 -d0 -j$(nproc) link=static runtime-link=shared threading=multi variant=release cxxstd=17 cxxflags=-fPIC install
             environment: >-
               BOOST_ROOT=/opt/boost-1.82.0
               Boost_ROOT=/opt/boost-1.82.0
               CMAKE_ARGS='-DBoost_NO_SYSTEM_PATHS=ON -DBoost_USE_STATIC_LIBS=ON -DBOOST_ROOT=/opt/boost-1.82.0 -DBoost_ROOT=/opt/boost-1.82.0'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Build wheel + run post-install tests in a fresh venv
-        uses: pypa/cibuildwheel@v3.4.1
+        uses: pypa/cibuildwheel@v4.2.1
         env:
           CIBW_BUILD: cp${{ matrix.python }}-manylinux_x86_64
           CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.manylinux.image }}
           CIBW_BEFORE_ALL_LINUX: ${{ matrix.manylinux.before_all }}
           CIBW_ENVIRONMENT_LINUX: ${{ matrix.manylinux.environment }}
-          # Install the wheel's [dev,examples] extras into the test venv
-          # so every runtime dep exercised by the test suite is present
-          # (pybullet, casadi, trimesh, fire, matplotlib, pytest, ...).
-          CIBW_TEST_EXTRAS: "dev,examples"
+          # Install the wheel's extras into the test venv so every runtime
+          # dep exercised by the test suite is present.  pin / osqp (the
+          # [kinematics] extra) and pybullet (the [examples] extra) do not
+          # publish CPython 3.15 wheels yet, so that row tests the core
+          # package only; tests needing them skip via importorskip.
+          # TRAC-IK tests always skip here: pytracik needs conda-forge's
+          # orocos-kdl + NLopt and is only built in the pixi environment.
+          CIBW_TEST_EXTRAS: ${{ matrix.python == '315' && 'dev' || 'dev,examples,kinematics' }}
           # {project} expands to the checked-out source tree inside the
           # manylinux container — lets pytest find tests/ without needing
           # the repo to be importable (the wheel provides the package).
-          #
-          # --ignore test_kinematics.py: the kinematics module (pinocchio FK,
-          # collision model, pink IK, trac-ik) is NOT part of the
-          # pip-compat contract — pin-pink requires Python >=3.10 and
-          # trac-ik / collision-model need conda-forge helpers.  The
-          # planning + trajectory + constraint/cost pipelines ARE covered
-          # and must pass on every supported cpython.
           CIBW_TEST_COMMAND: >
             python -m pytest -v {project}/tests/test_install_smoke.py &&
             python -m pytest {project}/tests
-            --ignore={project}/tests/test_kinematics.py
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: wheel-cp${{ matrix.python }}-${{ matrix.manylinux.platform }}

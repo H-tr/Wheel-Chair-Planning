@@ -8,6 +8,11 @@ once per ``plan()`` call.
 Supports subgroup planning: each subgroup operates on a reduced
 state space while frozen joints are expanded to the full 10-DOF
 config before collision checks.
+
+:meth:`MotionPlanner.plan_kinodynamic` is the kinodynamic alternative:
+FLASK (flatness-based kinodynamic RRT-Connect) returns a
+time-parameterised trajectory that respects joint and base velocity /
+acceleration limits, with the base following diff-drive kinematics.
 """
 
 from __future__ import annotations
@@ -16,7 +21,13 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
-from wheelchair_planning.types import PlannerConfig, PlanningResult, PlanningStatus
+from wheelchair_planning.types import (
+    KinodynamicConfig,
+    KinodynamicResult,
+    PlannerConfig,
+    PlanningResult,
+    PlanningStatus,
+)
 
 
 @runtime_checkable
@@ -24,18 +35,14 @@ class MotionPlannerBase(Protocol):
     """Protocol for motion planner backends."""
 
     @property
-    def robot_name(self) -> str:
-        ...
+    def robot_name(self) -> str: ...
 
     @property
-    def num_dof(self) -> int:
-        ...
+    def num_dof(self) -> int: ...
 
-    def plan(self, start: np.ndarray, goal: np.ndarray) -> PlanningResult:
-        ...
+    def plan(self, start: np.ndarray, goal: np.ndarray) -> PlanningResult: ...
 
-    def validate(self, configuration: np.ndarray) -> bool:
-        ...
+    def validate(self, configuration: np.ndarray) -> bool: ...
 
 
 class MotionPlanner:
@@ -328,6 +335,20 @@ class MotionPlanner:
 
     # ── Subgroup switching ───────────────────────────────────────────
 
+    def set_base_bounds(
+        self, x_lo: float, x_hi: float, y_lo: float, y_hi: float
+    ) -> None:
+        """Bound the planar base's x / y (metres), replacing the URDF's
+        +-10 m virtual-joint limits.
+
+        Applies to every planner and persists across :meth:`set_subgroup`.
+        :meth:`plan_kinodynamic` samples base positions uniformly inside
+        these bounds, so keep them close to the task's workspace.
+        """
+        self._planner.set_base_bounds(
+            float(x_lo), float(x_hi), float(y_lo), float(y_hi)
+        )
+
     def set_subgroup(
         self,
         robot_name: str,
@@ -493,6 +514,124 @@ class MotionPlanner:
             iterations=0,
             path_cost=result.path_cost,
         )
+
+    def plan_kinodynamic(
+        self,
+        start: np.ndarray,
+        goal: np.ndarray,
+        start_velocity: np.ndarray | None = None,
+        config: KinodynamicConfig | None = None,
+    ) -> KinodynamicResult:
+        """Plan a dynamically feasible, time-parameterised trajectory (FLASK).
+
+        Kinodynamic RRT-Connect in the differentially flat output space
+        (Duong et al., T-RO 2026): every tree edge is the closed-form
+        minimum-effort cubic between two (position, velocity) states,
+        validated with SIMD-batched collision checks and the joint /
+        base velocity and acceleration limits from
+        :mod:`wheelchair_planning.wheelchair`.  For subgroups with the
+        base, the wheelchair follows diff-drive (unicycle) kinematics —
+        heading tangent to the path, forward or reverse, rotate-in-place
+        allowed while parked — so the output can be tracked directly
+        with feed-forward + PID; see
+        :meth:`~wheelchair_planning.trajectory.KinodynamicTrajectory.base_twist`.
+
+        Base positions are sampled inside the planner's base bounds, so
+        call :meth:`set_base_bounds` around the task's workspace first.
+        Collision constraints and soft costs registered on this planner
+        are not used by the kinodynamic planner.
+
+        Args:
+            start: Start configuration (active DOF).
+            goal: Goal configuration (active DOF).  Reached at rest.
+            start_velocity: Optional active-DOF velocity at ``start`` —
+                e.g. ``traj.velocity(t)`` of the trajectory being
+                executed, for replanning on the fly.  Base entries are
+                world-frame ``(x_dot, y_dot, theta_dot)``; the planar
+                part is projected onto the heading.  Defaults to rest.
+            config: Kinodynamic planner parameters.
+
+        Returns:
+            A :class:`~wheelchair_planning.types.KinodynamicResult` whose
+            ``trajectory`` is a
+            :class:`~wheelchair_planning.trajectory.KinodynamicTrajectory`.
+        """
+        from wheelchair_planning.trajectory import KinodynamicTrajectory
+
+        if config is None:
+            config = KinodynamicConfig()
+        start = np.asarray(start, dtype=np.float64)
+        goal = np.asarray(goal, dtype=np.float64)
+        velocity = [] if start_velocity is None else np.asarray(start_velocity).tolist()
+
+        for q, status in (
+            (start, PlanningStatus.INVALID_START),
+            (goal, PlanningStatus.INVALID_GOAL),
+        ):
+            if not self._planner.validate(q.tolist()):
+                return KinodynamicResult(status, None, 0, 0, float("inf"))
+
+        r = self._planner.plan_kinodynamic(
+            start.tolist(),
+            velocity,
+            goal.tolist(),
+            config.time_limit,
+            self._kinodynamic_settings(config),
+        )
+        return KinodynamicResult(
+            status=PlanningStatus.SUCCESS if r.solved else PlanningStatus.FAILED,
+            trajectory=KinodynamicTrajectory(r.trajectory) if r.solved else None,
+            planning_time_ns=r.planning_time_ns,
+            iterations=r.iterations,
+            cost=r.cost,
+            simplify_time_ns=r.simplify_time_ns,
+            start_tree_size=r.start_tree_size,
+            goal_tree_size=r.goal_tree_size,
+            edges_checked=r.edges_checked,
+        )
+
+    def _kinodynamic_settings(self, config: KinodynamicConfig):
+        """Translate a :class:`KinodynamicConfig` + robot limits into the
+        C++ ``KinodynamicSettings`` for this subgroup."""
+        from wheelchair_planning._ompl_vamp import KinodynamicSettings
+        from wheelchair_planning.wheelchair import (
+            BASE_MAX_ACCELERATION,
+            BASE_MAX_SPEED,
+            BASE_MAX_YAW_ACCELERATION,
+            BASE_MAX_YAW_RATE,
+            BASE_REVERSE_ENABLE,
+            JOINT_ACCELERATION_LIMITS,
+            JOINT_VELOCITY_LIMITS,
+        )
+
+        arm_joints = [j for j in self._joint_names if j in JOINT_VELOCITY_LIMITS]
+        vs, acs = config.velocity_scale, config.acceleration_scale
+        s = KinodynamicSettings()
+        s.max_velocity = [JOINT_VELOCITY_LIMITS[j] * vs for j in arm_joints]
+        s.max_acceleration = [JOINT_ACCELERATION_LIMITS[j] * acs for j in arm_joints]
+        s.base_max_speed = BASE_MAX_SPEED * vs
+        s.base_max_acceleration = BASE_MAX_ACCELERATION * acs
+        s.base_max_yaw_rate = BASE_MAX_YAW_RATE * vs
+        s.base_max_yaw_acceleration = BASE_MAX_YAW_ACCELERATION * acs
+        s.allow_reverse = (
+            BASE_REVERSE_ENABLE
+            if config.allow_reverse is None
+            else config.allow_reverse
+        )
+        s.rho = config.rho
+        s.limit_aware_duration = config.limit_aware_duration
+        s.max_extension_time = config.max_extension_time
+        s.velocity_sample_scale = config.velocity_sample_scale
+        s.velocity_metric_weight = config.velocity_metric_weight
+        s.rest_sample_probability = config.rest_sample_probability
+        s.spin_probability = config.spin_probability
+        s.heading_tolerance = config.heading_tolerance
+        s.simplify = config.simplify
+        s.simplify_iterations = config.simplify_iterations
+        s.simplify_time_limit = config.simplify_time_limit
+        s.max_iterations = config.max_iterations
+        s.seed = config.seed
+        return s
 
     def simplify_path(self, path: np.ndarray, time_limit: float = 1.0) -> np.ndarray:
         """Run OMPL's shortcut-based path simplifier on ``path``.

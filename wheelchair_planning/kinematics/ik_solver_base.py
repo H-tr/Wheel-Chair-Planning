@@ -26,18 +26,15 @@ class IKSolverBase(ABC):
 
     @property
     @abstractmethod
-    def base_frame(self) -> str:
-        ...
+    def base_frame(self) -> str: ...
 
     @property
     @abstractmethod
-    def ee_frame(self) -> str:
-        ...
+    def ee_frame(self) -> str: ...
 
     @property
     @abstractmethod
-    def num_joints(self) -> int:
-        ...
+    def num_joints(self) -> int: ...
 
     @abstractmethod
     def solve(
@@ -131,11 +128,10 @@ def create_ik_solver(
         except ModuleNotFoundError as exc:
             if exc.name == "pinocchio":
                 raise ModuleNotFoundError(
-                    "TRAC-IK backend requires 'pinocchio' (PyPI package: 'pin'). "
-                    "Install a compatible pin release for your Python version "
-                    "(for Python 3.8, pin==2.6.21 is known to work), and run "
-                    "with a clean environment (avoid ROS PYTHONPATH/LD_LIBRARY_PATH "
-                    "overrides)."
+                    "TRAC-IK backend requires 'pinocchio'. Install it with "
+                    "`pip install wheelchair_planning[kinematics]` (PyPI package: "
+                    "'pin'), and run with a clean environment (avoid ROS "
+                    "PYTHONPATH/LD_LIBRARY_PATH overrides)."
                 ) from exc
             raise
 
