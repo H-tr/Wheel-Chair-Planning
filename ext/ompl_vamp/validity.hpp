@@ -4,12 +4,12 @@
  * Two pairs of classes:
  *
  *  - ``WheelchairValidityChecker`` / ``WheelchairMotionValidator``
- *      Full-body planner: the OMPL state already has 24 DOFs, so we
+ *      Full-body planner: the OMPL state already has 10 DOFs, so we
  *      copy it straight into a VAMP ``Robot::Configuration``.
  *
  *  - ``SubgroupValidityChecker`` / ``SubgroupMotionValidator``
  *      Subgroup planner: the OMPL state is the reduced active subset.
- *      We expand it to a 24-DOF body via ``active_indices`` +
+ *      We expand it to a 10-DOF body via ``active_indices`` +
  *      ``frozen_config`` before calling VAMP.
  *
  * In both cases the actual collision checking is delegated to VAMP's
@@ -81,7 +81,7 @@ class WheelchairValidityChecker : public ob::StateValidityChecker {
 
   static auto ompl_to_vamp(const ob::State *state) -> Robot::Configuration {
     alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars>
+        std::array<float, Robot::Configuration::num_scalars_rounded>
             buf{};
     const auto *rv = extract_real_state(state);
     for (std::size_t i = 0; i < Robot::dimension; ++i)
@@ -115,7 +115,7 @@ class WheelchairMotionValidator : public ob::MotionValidator {
 
   static auto ompl_to_vamp(const ob::State *state) -> Robot::Configuration {
     alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars>
+        std::array<float, Robot::Configuration::num_scalars_rounded>
             buf{};
     const auto *rv = extract_real_state(state);
     for (std::size_t i = 0; i < Robot::dimension; ++i)
@@ -149,7 +149,7 @@ class SubgroupValidityChecker : public ob::StateValidityChecker {
 
   auto expand(const ob::State *state) const -> Robot::Configuration {
     alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars>
+        std::array<float, Robot::Configuration::num_scalars_rounded>
             buf{};
     std::copy(frozen_.begin(), frozen_.end(), buf.begin());
     const auto *rv = extract_real_state(state);
@@ -190,7 +190,7 @@ class SubgroupMotionValidator : public ob::MotionValidator {
 
   auto expand(const ob::State *state) const -> Robot::Configuration {
     alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars>
+        std::array<float, Robot::Configuration::num_scalars_rounded>
             buf{};
     std::copy(frozen_.begin(), frozen_.end(), buf.begin());
     const auto *rv = extract_real_state(state);

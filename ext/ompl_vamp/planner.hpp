@@ -101,7 +101,9 @@ class OmplVampPlanner {
   /// Full-body constructor (24 DOF).
   OmplVampPlanner() : active_dim_(Robot::dimension), is_subgroup_(false) {
     Robot::Configuration lo, hi;
-    std::array<float, Robot::dimension> zeros{}, ones{};
+    alignas(Robot::Configuration::S::Alignment)
+        std::array<float, Robot::Configuration::num_scalars_rounded>
+            zeros{}, ones{};
     ones.fill(1.0f);
     lo = Robot::Configuration(zeros.data());
     hi = Robot::Configuration(ones.data());
@@ -132,7 +134,9 @@ class OmplVampPlanner {
       frozen_config_[i] = static_cast<float>(frozen_config[i]);
 
     Robot::Configuration lo, hi;
-    std::array<float, Robot::dimension> zeros{}, ones{};
+    alignas(Robot::Configuration::S::Alignment)
+        std::array<float, Robot::Configuration::num_scalars_rounded>
+            zeros{}, ones{};
     ones.fill(1.0f);
     lo = Robot::Configuration(zeros.data());
     hi = Robot::Configuration(ones.data());
@@ -424,7 +428,7 @@ class OmplVampPlanner {
   // worst case (every block fails) degrades to the baseline N single
   // checks.
   //
-  // Subgroup planners expand each reduced-DOF config to the full 24-DOF
+  // Subgroup planners expand each reduced-DOF config to the full 10-DOF
   // body via the stored frozen pose before packing, mirroring
   // ``validate(...)``.
   auto validate_batch(const std::vector<std::vector<double>> &configs)
@@ -627,13 +631,13 @@ class OmplVampPlanner {
 
   void sync_env() { env_ = VampEnv(float_env_); }
 
-  // Expand an active-DOF config into a full 24-DOF VAMP Configuration,
+  // Expand an active-DOF config into a full 10-DOF VAMP Configuration,
   // injecting the frozen pose for joints outside ``active_indices_``
   // when running as a subgroup planner.
   auto build_full_config_(const std::vector<double> &config) const
       -> Robot::Configuration {
     alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars>
+        std::array<float, Robot::Configuration::num_scalars_rounded>
             buf{};
     if (is_subgroup_) {
       std::copy(frozen_config_.begin(), frozen_config_.end(), buf.begin());
@@ -672,7 +676,9 @@ class OmplVampPlanner {
 
   void rebuild_space_() {
     Robot::Configuration lo, hi;
-    std::array<float, Robot::dimension> zeros{}, ones{};
+    alignas(Robot::Configuration::S::Alignment)
+        std::array<float, Robot::Configuration::num_scalars_rounded>
+            zeros{}, ones{};
     ones.fill(1.0f);
     lo = Robot::Configuration(zeros.data());
     hi = Robot::Configuration(ones.data());
