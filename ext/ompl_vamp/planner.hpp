@@ -3,7 +3,7 @@
  *
  * Two construction modes:
  *
- *  - ``OmplVampPlanner()`` — full body, 24 DOF (3 base + 21 joints).
+ *  - ``OmplVampPlanner()`` — full body, 10 DOF (3 base + 7 arm joints).
  *  - ``OmplVampPlanner(active_indices, frozen_config)`` — subgroup
  *    planning over the listed joint indices, with the rest of the
  *    body pinned to ``frozen_config`` for every collision check.
@@ -11,6 +11,7 @@
  * The planner exposes a uniform Python-friendly API:
  * ``add_pointcloud`` / ``add_sphere`` / ``clear_environment`` build
  * the obstacle environment, ``plan(start, goal, ...)`` runs OMPL,
+ * ``plan_kinodynamic(...)`` runs the FLASK kinodynamic planner,
  * ``validate(...)``, ``dimension()``, ``lower_bounds()``,
  * ``upper_bounds()`` and ``min_max_radii()`` round out the surface.
  */
@@ -30,6 +31,7 @@
 
 #include "compiled_constraint.hpp"
 #include "compiled_cost.hpp"
+#include "plan_kinodynamic.hpp"
 #include "validity.hpp"
 // OMPL — informed trees
 #include <ompl/geometric/planners/informedtrees/ABITstar.h>
@@ -77,6 +79,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -89,6 +92,9 @@ namespace wheelchair {
 
 namespace og = ompl::geometric;
 
+/// The planar base's virtual joints (x, y, theta) lead the configuration.
+inline constexpr int kBaseDim = 3;
+
 struct PlanResult {
   bool solved;
   std::vector<std::vector<double>> path;
@@ -98,29 +104,9 @@ struct PlanResult {
 
 class OmplVampPlanner {
  public:
-  /// Full-body constructor (24 DOF).
+  /// Full-body constructor (10 DOF).
   OmplVampPlanner() : active_dim_(Robot::dimension), is_subgroup_(false) {
-    Robot::Configuration lo, hi;
-    alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars_rounded>
-            zeros{}, ones{};
-    ones.fill(1.0f);
-    lo = Robot::Configuration(zeros.data());
-    hi = Robot::Configuration(ones.data());
-    Robot::scale_configuration(lo);
-    Robot::scale_configuration(hi);
-
-    auto lo_arr = lo.to_array();
-    auto hi_arr = hi.to_array();
-
-    auto space = std::make_shared<ob::RealVectorStateSpace>(Robot::dimension);
-    ob::RealVectorBounds bounds(Robot::dimension);
-    for (std::size_t i = 0; i < Robot::dimension; ++i) {
-      bounds.setLow(i, std::min(lo_arr[i], hi_arr[i]));
-      bounds.setHigh(i, std::max(lo_arr[i], hi_arr[i]));
-    }
-    space->setBounds(bounds);
-    space_ = space;
+    rebuild_space_();
   }
 
   /// Subgroup constructor (reduced DOF).
@@ -132,28 +118,7 @@ class OmplVampPlanner {
     frozen_config_.resize(frozen_config.size());
     for (std::size_t i = 0; i < frozen_config.size(); ++i)
       frozen_config_[i] = static_cast<float>(frozen_config[i]);
-
-    Robot::Configuration lo, hi;
-    alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars_rounded>
-            zeros{}, ones{};
-    ones.fill(1.0f);
-    lo = Robot::Configuration(zeros.data());
-    hi = Robot::Configuration(ones.data());
-    Robot::scale_configuration(lo);
-    Robot::scale_configuration(hi);
-    auto lo_arr = lo.to_array();
-    auto hi_arr = hi.to_array();
-
-    auto space = std::make_shared<ob::RealVectorStateSpace>(active_dim_);
-    ob::RealVectorBounds bounds(active_dim_);
-    for (std::size_t i = 0; i < active_indices_.size(); ++i) {
-      auto idx = active_indices_[i];
-      bounds.setLow(i, std::min(lo_arr[idx], hi_arr[idx]));
-      bounds.setHigh(i, std::max(lo_arr[idx], hi_arr[idx]));
-    }
-    space->setBounds(bounds);
-    space_ = space;
+    rebuild_space_();
   }
 
   /// Set the scene pointcloud.  The planner holds at most one cloud;
@@ -404,6 +369,73 @@ class OmplVampPlanner {
     return path_to_waypoints_(geo);
   }
 
+  // ── Kinodynamic planning (FLASK) ──────────────────────────────────
+  //
+  // Plans a time-parameterised trajectory in the differentially flat
+  // output space (see plan_kinodynamic.hpp): closed-form cubic edges,
+  // SIMD-batched collision checks, velocity / acceleration limits
+  // enforced along every edge.  When the active DOF include the planar
+  // base, the base follows diff-drive (unicycle) kinematics about the
+  // rear drive-axle midpoint, which is ``base_link``'s origin.
+  // ``start_velocity`` is either empty (start at rest) or an active-DOF
+  // velocity in the same layout the returned trajectory reports (base:
+  // world-frame x_dot, y_dot, theta_dot); the goal is always reached at
+  // rest.  Constraints and soft costs registered on this planner are not
+  // used.
+  auto plan_kinodynamic(const std::vector<double> &start,
+                        const std::vector<double> &start_velocity,
+                        const std::vector<double> &goal, double time_limit,
+                        const KinodynamicSettings &settings)
+      -> KinodynamicResult {
+    auto check_dim = [&](const std::vector<double> &v, const char *what) {
+      if (static_cast<int>(v.size()) != active_dim_) {
+        throw std::invalid_argument(std::string("plan_kinodynamic: ") + what +
+                                    " length " + std::to_string(v.size()) +
+                                    " does not match active DOF " +
+                                    std::to_string(active_dim_) + ".");
+      }
+    };
+    check_dim(start, "start");
+    check_dim(goal, "goal");
+    if (!start_velocity.empty()) check_dim(start_velocity, "start_velocity");
+
+    std::vector<int> active = active_indices_;
+    std::vector<float> frozen = frozen_config_;
+    if (!is_subgroup_) {
+      active.resize(Robot::dimension);
+      for (std::size_t i = 0; i < Robot::dimension; ++i)
+        active[i] = static_cast<int>(i);
+      frozen.assign(Robot::dimension, 0.0f);
+    }
+
+    // The flat-output layout needs the whole planar base (x, y, theta =
+    // joints 0, 1, 2) as the leading active DOF, or none of it.
+    int base_dim = 0;
+    for (int j : active) base_dim += (j < kBaseDim) ? 1 : 0;
+    if (base_dim != 0) {
+      for (int k = 0; k < kBaseDim; ++k) {
+        if (static_cast<int>(active.size()) <= k || active[k] != k) {
+          throw std::invalid_argument(
+              "plan_kinodynamic: the active DOF must start with all three "
+              "base joints (x, y, theta) in order, or contain none of them.");
+        }
+      }
+    }
+    const std::size_t n_joints =
+        static_cast<std::size_t>(active_dim_ - base_dim);
+    if (settings.max_velocity.size() != n_joints ||
+        settings.max_acceleration.size() != n_joints) {
+      throw std::invalid_argument(
+          "plan_kinodynamic: max_velocity / max_acceleration need one entry "
+          "per non-base active DOF (" +
+          std::to_string(n_joints) + ").");
+    }
+
+    FlaskPlanner flask(env_, active, frozen, base_dim, lower_bounds(),
+                       upper_bounds(), settings);
+    return flask.plan(start, start_velocity, goal, time_limit);
+  }
+
   auto validate(std::vector<double> config) -> bool {
     if (static_cast<int>(config.size()) != active_dim_) {
       throw std::invalid_argument(std::string("validate: config length ") +
@@ -592,6 +624,20 @@ class OmplVampPlanner {
     return {Robot::min_radius, Robot::max_radius};
   }
 
+  /// Bound the planar base's x / y (metres) for every planner, replacing
+  /// the URDF's +-10 m virtual-joint limits.  Persists across
+  /// ``set_subgroup`` / ``set_full_body``.  The kinodynamic planner
+  /// samples base positions uniformly inside these bounds, so keep them
+  /// close to the task's workspace.
+  void set_base_bounds(double x_lo, double x_hi, double y_lo, double y_hi) {
+    if (!(x_lo < x_hi) || !(y_lo < y_hi)) {
+      throw std::invalid_argument(
+          "set_base_bounds: need x_lo < x_hi and y_lo < y_hi.");
+    }
+    base_bounds_ = std::array<double, 4>{x_lo, x_hi, y_lo, y_hi};
+    rebuild_space_();
+  }
+
   /// Switch to a different subgroup without rebuilding the environment.
   void set_subgroup(std::vector<int> active_indices,
                     std::vector<double> frozen_config) {
@@ -622,6 +668,9 @@ class OmplVampPlanner {
   bool is_subgroup_;
   std::vector<int> active_indices_;
   std::vector<float> frozen_config_;
+  // User override of the planar base's (x_lo, x_hi, y_lo, y_hi), applied
+  // on top of the URDF limits whenever the state space is rebuilt.
+  std::optional<std::array<double, 4>> base_bounds_;
   ob::StateSpacePtr space_;
   FloatEnv float_env_;
   VampEnv env_;
@@ -699,6 +748,15 @@ class OmplVampPlanner {
       for (int i = 0; i < active_dim_; ++i) {
         bounds.setLow(i, std::min(lo_arr[i], hi_arr[i]));
         bounds.setHigh(i, std::max(lo_arr[i], hi_arr[i]));
+      }
+    }
+    if (base_bounds_) {
+      for (int i = 0; i < active_dim_; ++i) {
+        const int joint = is_subgroup_ ? active_indices_[i] : i;
+        if (joint == 0 || joint == 1) {
+          bounds.setLow(i, (*base_bounds_)[2 * joint]);
+          bounds.setHigh(i, (*base_bounds_)[2 * joint + 1]);
+        }
       }
     }
     space->setBounds(bounds);

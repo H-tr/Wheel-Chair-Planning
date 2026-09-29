@@ -23,6 +23,7 @@ mobile manipulator (a 3-DOF planar wheelchair base + a 7-DOF xArm7 arm).
 - **Inverse Kinematics** — TRAC-IK (unconstrained) and Pink (QP-based constrained) solvers with self-collision avoidance and camera/orientation stabilization
 - **Motion Planning** — VAMP-based planner with collision checking, path validation, and subgroup planning (arm-only, base-only, and whole-body)
 - **Time Parameterization** — TOPP-RA by default, with legacy TOTG available; converts planned paths into executable trajectories with velocity/acceleration limits
+- **Kinodynamic Planning** — FLASK (flatness-based kinodynamic RRT-Connect) plans time-parameterised trajectories directly, with joint/base velocity and acceleration limits and an exactly nonholonomic diff-drive base
 - **Collision Geometry** — Spherized URDF representations for efficient collision detection, with pointcloud obstacle support
 
 ## Robot
@@ -67,6 +68,9 @@ pixi run python examples/planning/subgroup.py
 
 # Time parameterization
 pixi run python examples/planning/time_parameterization.py
+
+# Kinodynamic planning (FLASK): drive to a table, then reach over it
+pixi run python examples/planning/kinodynamic.py
 
 # Tests
 pixi run -e dev test

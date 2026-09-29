@@ -54,14 +54,14 @@ CHAIN_CONFIGS: dict[str, ChainConfig] = {
 
 VIZ_URDF_PATH = os.path.join(_RESOURCES_DIR, "wheelchair_viz.urdf")
 
-# Conservative placeholder limits for time-optimal trajectory generation.
-# The base translation joints (x, y) and yaw move slowly; the arm joints can
-# be faster. Override per-joint when real robot specs are wired in.
+# Placeholder limits for time-optimal trajectory generation and kinodynamic
+# planning. The base drives at an indoor walking pace; the arm joints are
+# conservative. Override per-joint when real robot specs are wired in.
 MAX_VELOCITY = np.array(
     [
-        0.3,  # base x   (m/s)
-        0.3,  # base y   (m/s)
-        0.5,  # base yaw (rad/s)
+        0.6,  # base x   (m/s)
+        0.6,  # base y   (m/s)
+        1.0,  # base yaw (rad/s)
         0.8,  # joint1
         0.8,  # joint2
         0.8,  # joint3
@@ -87,6 +87,27 @@ MAX_ACCELERATION = np.array(
     ],
     dtype=np.float64,
 )
+
+# Kinodynamic limits used by ``MotionPlanner.plan_kinodynamic`` (FLASK),
+# taken from the placeholder limits above. The base is a differential
+# drive: the rear hub-motor wheels drive and the front omni wheels roll
+# freely, so ``base_link``'s origin (the rear-axle midpoint) moves along
+# its heading. Its acceleration is tangential (along the heading) and the
+# yaw acceleration only bounds rotate-in-place segments.
+_ARM_JOINT_NAMES = [f"joint{i}" for i in range(1, 8)]
+JOINT_VELOCITY_LIMITS: dict[str, float] = dict(
+    zip(_ARM_JOINT_NAMES, MAX_VELOCITY[3:].tolist())
+)
+JOINT_ACCELERATION_LIMITS: dict[str, float] = dict(
+    zip(_ARM_JOINT_NAMES, MAX_ACCELERATION[3:].tolist())
+)
+BASE_MAX_SPEED: float = float(MAX_VELOCITY[0])  # m/s
+BASE_MAX_ACCELERATION: float = float(MAX_ACCELERATION[0])  # m/s^2
+BASE_MAX_YAW_RATE: float = float(MAX_VELOCITY[2])  # rad/s
+BASE_MAX_YAW_ACCELERATION: float = float(MAX_ACCELERATION[2])  # rad/s^2
+# A seated user faces +x (the omni-wheel end), so the chair drives forward and
+# turns in place rather than reversing.
+BASE_REVERSE_ENABLE: bool = False
 
 wheelchair_robot_config = RobotConfig(
     urdf_path=os.path.join(_RESOURCES_DIR, "wheelchair.urdf"),

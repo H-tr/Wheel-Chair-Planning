@@ -30,6 +30,10 @@
 
 ::: wheelchair_planning.types.planning.PlanningResult
 
+::: wheelchair_planning.types.planning.KinodynamicConfig
+
+::: wheelchair_planning.types.planning.KinodynamicResult
+
 ## Robot
 
 ::: wheelchair_planning.types.robot.RobotConfig

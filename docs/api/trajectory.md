@@ -12,6 +12,10 @@
 
 ::: wheelchair_planning.trajectory.trajectory.Trajectory
 
+## KinodynamicTrajectory
+
+::: wheelchair_planning.trajectory.kinodynamic.KinodynamicTrajectory
+
 ## Low-level C++ binding
 
 ::: wheelchair_planning._time_parameterization.TotgTrajectory

@@ -343,4 +343,12 @@ good_goals = goals[mask]
     per-joint velocity and acceleration limits. TOPP-RA is the default;
     vendored TOTG is still available as an option.
 
+-   [__Kinodynamic planning__](kinodynamic.md)
+
+    ---
+
+    FLASK: plan a time-parameterised trajectory directly, with joint
+    and base velocity / acceleration limits and an exactly
+    nonholonomic (diff-drive) base. Track it with feed-forward + PID.
+
 </div>

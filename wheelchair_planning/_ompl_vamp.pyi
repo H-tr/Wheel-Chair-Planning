@@ -9,6 +9,8 @@ type checkers can resolve ``import wheelchair_planning._ompl_vamp``.
 from collections.abc import Sequence
 from typing import overload
 
+import numpy as np
+
 class PlanResult:
     """Result of a single ``OmplVampPlanner.plan`` call."""
 
@@ -37,21 +39,121 @@ class PlanResult:
         """
         ...
 
+class KinodynamicSettings:
+    """Parameters of ``OmplVampPlanner.plan_kinodynamic`` (FLASK).
+
+    See ``ext/ompl_vamp/plan_kinodynamic.hpp`` for field semantics;
+    :class:`wheelchair_planning.types.KinodynamicConfig` fills them from
+    the robot limits in :mod:`wheelchair_planning.wheelchair`.
+    """
+
+    max_velocity: list[float]
+    max_acceleration: list[float]
+    base_max_speed: float
+    base_max_acceleration: float
+    base_max_yaw_rate: float
+    base_max_yaw_acceleration: float
+    allow_reverse: bool
+    rho: float
+    limit_aware_duration: bool
+    max_extension_time: float
+    velocity_sample_scale: float
+    velocity_metric_weight: float
+    rest_sample_probability: float
+    spin_probability: float
+    heading_tolerance: float
+    simplify: bool
+    simplify_iterations: int
+    simplify_time_limit: float
+    max_iterations: int
+    seed: int
+
+    def __init__(self) -> None: ...
+
+class FlatTrajectory:
+    """Piecewise-cubic trajectory in the flat output space (C++ handle)."""
+
+    @property
+    def duration(self) -> float: ...
+    @property
+    def active_dim(self) -> int: ...
+    @property
+    def base_dim(self) -> int: ...
+    @property
+    def num_segments(self) -> int: ...
+    def position(self, t: float) -> np.ndarray: ...
+    def velocity(self, t: float) -> np.ndarray: ...
+    def acceleration(self, t: float) -> np.ndarray: ...
+    def sample(
+        self, times: Sequence[float]
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]: ...
+    def sample_uniform(
+        self, dt: float
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
+    def base_twist(self, t: float) -> tuple[float, float]:
+        """Body-frame base command ``(v, omega)`` at ``t``."""
+        ...
+    def knot_times(self) -> list[float]: ...
+    def segment_kinds(self) -> list[int]:
+        """Per segment: ``0`` drive, ``1`` rotate in place."""
+        ...
+    def segment_gears(self) -> list[int]:
+        """Per segment: ``0`` forward, ``1`` reverse."""
+        ...
+
+class KinodynamicResult:
+    """Result of ``OmplVampPlanner.plan_kinodynamic``."""
+
+    @property
+    def solved(self) -> bool: ...
+    @property
+    def trajectory(self) -> FlatTrajectory: ...
+    @property
+    def planning_time_ns(self) -> int:
+        """Total planning time including simplification, in nanoseconds."""
+        ...
+    @property
+    def simplify_time_ns(self) -> int: ...
+    @property
+    def cost(self) -> float:
+        """LQMT cost ``sum_i w_i int y_i''^2 dt + rho T`` of the trajectory."""
+        ...
+    @property
+    def iterations(self) -> int: ...
+    @property
+    def start_tree_size(self) -> int: ...
+    @property
+    def goal_tree_size(self) -> int: ...
+    @property
+    def edges_checked(self) -> int: ...
+
+def flat_optimal_time(
+    y0: Sequence[float],
+    v0: Sequence[float],
+    y1: Sequence[float],
+    v1: Sequence[float],
+    weights: Sequence[float],
+    rho: float,
+) -> tuple[float, float]:
+    """Minimum-cost duration ``T*`` and cost ``J(T*)`` of the LQMT (cubic)
+    motion between two flat states, ``J(T) = sum_i w_i int y_i''^2 dt + rho T``."""
+    ...
+
 class OmplVampPlanner:
     """OMPL planner with VAMP SIMD-accelerated collision checking.
 
     Two construction modes:
 
-    * ``OmplVampPlanner()`` — full body, 24 DOF (3 base + 21 joints).
+    * ``OmplVampPlanner()`` — full body, 10 DOF (3 base + 7 arm joints).
     * ``OmplVampPlanner(active_indices, frozen_config)`` — subgroup
       planner over the joints listed in ``active_indices``; the C++
       collision checker injects ``frozen_config`` for every other slot
-      in the 24-DOF body on every state and motion validity query.
+      in the 10-DOF body on every state and motion validity query.
     """
 
     @overload
     def __init__(self) -> None:
-        """Create a full-body planner (24 DOF)."""
+        """Create a full-body planner (10 DOF)."""
         ...
     @overload
     def __init__(
@@ -62,9 +164,9 @@ class OmplVampPlanner:
         """Create a subgroup planner.
 
         Args:
-            active_indices: Positions in the full 24-DOF body that this
+            active_indices: Positions in the full 10-DOF body that this
                 planner will plan over, in DOF order.
-            frozen_config: 24-DOF stance to inject for every joint *not*
+            frozen_config: 10-DOF stance to inject for every joint *not*
                 in ``active_indices``.
         """
         ...
@@ -192,6 +294,25 @@ class OmplVampPlanner:
                 ``interpolate_count``.
         """
         ...
+    def plan_kinodynamic(
+        self,
+        start: Sequence[float],
+        start_velocity: Sequence[float],
+        goal: Sequence[float],
+        time_limit: float,
+        settings: KinodynamicSettings,
+    ) -> KinodynamicResult:
+        """FLASK kinodynamic planning in the flat output space.
+
+        Args:
+            start: Active-DOF start configuration.
+            start_velocity: Active-DOF start velocity, or empty for rest.
+                Base entries are world-frame ``(x_dot, y_dot, theta_dot)``.
+            goal: Active-DOF goal configuration, reached at rest.
+            time_limit: Solver time limit in seconds.
+            settings: Limits and planner parameters.
+        """
+        ...
     def simplify_path(
         self,
         path: Sequence[Sequence[float]],
@@ -233,7 +354,7 @@ class OmplVampPlanner:
         """Return ``True`` if ``config`` is collision-free.
 
         ``config`` must have length :meth:`dimension`.  Subgroup
-        planners expand it to a full 24-DOF state with the stored
+        planners expand it to a full 10-DOF state with the stored
         ``frozen_config`` before checking.
         """
         ...
@@ -256,12 +377,12 @@ class OmplVampPlanner:
         back to per-lane single-state checks.
 
         Each ``configs[i]`` must have length :meth:`dimension`.
-        Subgroup planners expand each to a full 24-DOF state with
+        Subgroup planners expand each to a full 10-DOF state with
         the stored ``frozen_config`` before packing.
         """
         ...
     def dimension(self) -> int:
-        """Number of active joints — 24 for the full body, smaller for subgroups."""
+        """Number of active joints — 10 for the full body, smaller for subgroups."""
         ...
     def lower_bounds(self) -> list[float]:
         """Per-joint lower bounds for the active DOFs."""
@@ -276,6 +397,12 @@ class OmplVampPlanner:
         broadphase correctly.
         """
         ...
+    def set_base_bounds(
+        self, x_lo: float, x_hi: float, y_lo: float, y_hi: float
+    ) -> None:
+        """Bound the planar base's x / y (metres); persists across
+        :meth:`set_subgroup` / :meth:`set_full_body`."""
+        ...
     def set_subgroup(
         self,
         active_indices: Sequence[int],
@@ -287,14 +414,14 @@ class OmplVampPlanner:
         are preserved.
 
         Args:
-            active_indices: Positions in the full 24-DOF body that this
+            active_indices: Positions in the full 10-DOF body that this
                 planner will plan over, in DOF order.
-            frozen_config: 24-DOF stance to inject for every joint *not*
+            frozen_config: 10-DOF stance to inject for every joint *not*
                 in ``active_indices``.
         """
         ...
     def set_full_body(self) -> None:
-        """Switch back to full-body planning (24 DOF).
+        """Switch back to full-body planning (10 DOF).
 
         Clears all constraints.  The pointcloud and collision geometry
         are preserved.
