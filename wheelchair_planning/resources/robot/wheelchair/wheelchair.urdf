@@ -248,50 +248,6 @@
       </geometry>
     </collision>
   </link>
-  <link name="laser_left">
-    <inertial>
-      <origin rpy="0 0 0" xyz="0 0 0" />
-      <mass value="1.0" />
-      <inertia ixx="0.000744" ixy="0.0" ixz="0.0" iyy="0.000652" iyz="0.0" izz="0.000796" />
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0" />
-      <geometry>
-        <box size="0.065 0.073 0.06" />
-      </geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0" />
-      <geometry>
-        <box size="0.065 0.073 0.06" />
-      </geometry>
-    </collision>
-  </link>
-  <gazebo reference="laser_left">
-    <material>Gazebo/Blue</material>
-  </gazebo>
-  <link name="laser_right">
-    <inertial>
-      <origin rpy="0 0 0" xyz="0 0 0" />
-      <mass value="1.0" />
-      <inertia ixx="0.000744" ixy="0.0" ixz="0.0" iyy="0.000652" iyz="0.0" izz="0.000796" />
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0" />
-      <geometry>
-        <box size="0.065 0.073 0.06" />
-      </geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0" />
-      <geometry>
-        <box size="0.065 0.073 0.06" />
-      </geometry>
-    </collision>
-  </link>
-  <gazebo reference="laser_right">
-    <material>Gazebo/Blue</material>
-  </gazebo>
   <joint name="Lip_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0.58288042351 -0.135  0.14078186452388763" />
     <parent link="base_link" />
@@ -316,16 +272,6 @@
     <origin rpy="0 0 0" xyz="0 0.250498  0.12285605818033218" />
     <parent link="base_link" />
     <child link="back_left_1" />
-  </joint>
-  <joint name="lidar_left_joint" type="fixed">
-    <origin rpy="0 0 0" xyz="0.53412685915 0.24555433797836304 0.30312547385692596" />
-    <parent link="base_link" />
-    <child link="laser_left" />
-  </joint>
-  <joint name="lidar_right_joint" type="fixed">
-    <origin rpy="0 0 0" xyz="0.53412685915  -0.24555433797836304 0.30312547385692596" />
-    <parent link="base_link" />
-    <child link="laser_right" />
   </joint>
   <material name="Black">
     <color rgba="0.0 0.0 0.0 1.0" />

@@ -53,7 +53,6 @@ FREEZE_JOINTS = {
 STRIP_LINK_PREFIXES = (
     "camera_",  # RealSense optical/frame links
     "laser_",  # lidar boxes
-    "lip_",  # front ramp/lip
 )
 
 # The synthetic root link inserted above the chassis to host the planar base.
@@ -367,12 +366,14 @@ def _generate_collision_disables(robot: ET.Element, all_links: set[str]) -> None
     for proximal in ("link_base", "link1"):
         add(proximal, CHASSIS_LINK)
 
-    # Wheels are frozen, low, static geometry: disable them against the chassis,
-    # each other, and the arm mount so spherization artefacts never trip.
-    for w in _WHEELS:
+    # Wheels and the front lip are frozen, low, static geometry: disable them
+    # against the chassis, each other, and the arm mount so spherization
+    # artefacts never trip.
+    static = _WHEELS + ["lip_1"]
+    for w in static:
         add(w, CHASSIS_LINK)
         add(w, "link_base")
-        for w2 in _WHEELS:
+        for w2 in static:
             add(w, w2)
 
     for a, b in sorted(pairs):

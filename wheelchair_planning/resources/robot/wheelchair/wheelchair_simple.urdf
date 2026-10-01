@@ -148,6 +148,26 @@
       </geometry>
     </collision>
   </link>
+  <link name="lip_1">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <mass value="18.27800057815573" />
+      <inertia ixx="0.124422" ixy="0.0" ixz="-0.0" iyy="0.14266" iyz="0.001029" izz="0.263549" />
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="package://meshes/lip_1.stl" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="package://meshes/lip_1.stl" />
+      </geometry>
+    </collision>
+  </link>
   <link name="front_right_1">
     <inertial>
       <origin rpy="0 0 0" xyz="0 -0.013 0" />
@@ -228,12 +248,11 @@
       </geometry>
     </collision>
   </link>
-  <gazebo reference="laser_left">
-    <material>Gazebo/Blue</material>
-  </gazebo>
-  <gazebo reference="laser_right">
-    <material>Gazebo/Blue</material>
-  </gazebo>
+  <joint name="Lip_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.58288042351 -0.135  0.14078186452388763" />
+    <parent link="base_link" />
+    <child link="lip_1" />
+  </joint>
   <joint name="FR_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0.53412685915 -0.27255433797836304  0.12812547385692596" />
     <parent link="base_link" />
