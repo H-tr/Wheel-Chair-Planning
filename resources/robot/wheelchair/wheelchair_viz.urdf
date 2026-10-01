@@ -703,14 +703,14 @@
   <link name="link_eef">
     <visual>
       <geometry>
-        <mesh filename="package://meshes/d435_with_cam_stand.stl" />
+        <mesh filename="package://meshes/camera_realsense_visual_d435_with_cam_stand.stl" />
       </geometry>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <material name="Silver" />
     </visual>
     <collision>
       <geometry>
-        <mesh filename="package://meshes/d435_with_cam_stand.stl" />
+        <mesh filename="package://meshes/camera_realsense_collision_d435_with_cam_stand.stl" />
       </geometry>
       <origin rpy="0 0 0" xyz="0 0 0" />
     </collision>

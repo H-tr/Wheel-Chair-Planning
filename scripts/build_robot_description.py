@@ -89,11 +89,17 @@ def _write_xml(tree: ET.ElementTree, path: Path) -> None:
 # ── Stage 1: Preprocess URDF ────────────────────────────────────────────────
 
 
-def preprocess_urdf(urdf_path: Path) -> tuple[ET.ElementTree, dict[str, str]]:
+def preprocess_urdf(
+    urdf_path: Path,
+) -> tuple[ET.ElementTree, dict[str, str], dict[str, str]]:
     """Parse raw URDF, rename robot, flatten mesh paths, freeze fixed-for-planning joints.
 
-    Returns the tree plus a ``{basename: scale}`` map captured from the raw
-    URDF. The wheelchair chassis/wheel meshes are in millimetres
+    Returns the tree, a ``{flat_name: scale}`` map captured from the raw URDF,
+    and a ``{flat_name: path relative to meshes/}`` map of where each mesh
+    came from. A mesh keeps its basename unless two different source files
+    share it (e.g. ``camera/realsense/{visual,collision}/d435_with_cam_stand.stl``);
+    those get their folder path folded into the name so neither shadows the
+    other. The wheelchair chassis/wheel meshes are in millimetres
     (``scale="0.001"``) while the xArm7 meshes are in metres. foam ignores the
     URDF scale during spherization, so we reset every mesh scale to identity
     here and bake the original scale into the copied mesh in ``copy_meshes``.
@@ -106,15 +112,24 @@ def preprocess_urdf(urdf_path: Path) -> tuple[ET.ElementTree, dict[str, str]]:
 
     # Flatten mesh paths and capture/strip the per-mesh scale.
     #   package://wheelchair_xarm/meshes/<sub>/X.stl -> package://meshes/X.stl
+    #   (or package://meshes/<sub>_X.stl when another <sub2>/X.stl exists)
+    meshes = [m for m in root.iter("mesh") if "meshes/" in m.get("filename", "")]
+    rel_of = {id(m): m.get("filename").split("meshes/", 1)[1] for m in meshes}
+    sources_by_base: dict[str, set[str]] = {}
+    for rel in rel_of.values():
+        sources_by_base.setdefault(Path(rel).name, set()).add(rel)
     mesh_scales: dict[str, str] = {}
-    for mesh in root.iter("mesh"):
-        fn = mesh.get("filename", "")
-        if "meshes/" in fn:
-            basename = fn.split("/")[-1]
-            mesh_scales.setdefault(basename, mesh.get("scale", "1 1 1"))
-            mesh.set("filename", f"package://meshes/{basename}")
-            if "scale" in mesh.attrib:
-                del mesh.attrib["scale"]
+    mesh_sources: dict[str, str] = {}
+    for mesh in meshes:
+        rel = rel_of[id(mesh)]
+        flat = Path(rel).name
+        if len(sources_by_base[flat]) > 1:
+            flat = rel.replace("/", "_")
+        mesh_scales.setdefault(flat, mesh.get("scale", "1 1 1"))
+        mesh_sources[flat] = rel
+        mesh.set("filename", f"package://meshes/{flat}")
+        if "scale" in mesh.attrib:
+            del mesh.attrib["scale"]
 
     # Freeze the gripper and wheel joints: convert to fixed and drop the
     # motion-related children (limit/axis/mimic/dynamics).
@@ -125,7 +140,7 @@ def preprocess_urdf(urdf_path: Path) -> tuple[ET.ElementTree, dict[str, str]]:
                 for el in joint.findall(tag):
                     joint.remove(el)
 
-    return tree, mesh_scales
+    return tree, mesh_scales, mesh_sources
 
 
 # ── Stage 2: Generate simple URDF ───────────────────────────────────────────
@@ -389,21 +404,26 @@ def copy_meshes(
     urdf_tree: ET.ElementTree,
     mesh_src_root: Path,
     out_dir: Path,
-    mesh_scales: dict[str, str] | None = None,
+    mesh_scales: dict[str, str],
+    mesh_sources: dict[str, str],
 ) -> None:
     """Copy referenced STL files, flattening the multi-folder source tree and
     baking each mesh's URDF scale into the geometry.
 
     The raw description scatters meshes across ``meshes/<sub>/...`` folders; the
-    preprocessed URDF references them as ``package://meshes/<basename>``. Resolve
-    each basename by searching the source tree recursively. Because foam ignores
+    preprocessed URDF references them as ``package://meshes/<flat_name>``, and
+    ``mesh_sources`` (from ``preprocess_urdf``) says which source file each flat
+    name came from, so same-named files in different folders can't be mixed
+    up. Because foam ignores
     the URDF ``scale`` attribute during spherization, we apply each mesh's
     original scale here (e.g. the chassis/wheel meshes are in millimetres,
     ``scale="0.001"``) so the copied meshes are all in metres.
     """
-    mesh_scales = mesh_scales or {}
     mesh_out = out_dir / "meshes"
-    mesh_out.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(
+        mesh_out, ignore_errors=True
+    )  # generated: drop meshes no longer referenced
+    mesh_out.mkdir(parents=True)
 
     referenced = set()
     for mesh in urdf_tree.getroot().iter("mesh"):
@@ -411,25 +431,13 @@ def copy_meshes(
         if fn.startswith("package://meshes/"):
             referenced.add(fn.split("/")[-1])
 
-    # Build a basename -> path index of the source tree.
-    index: dict[str, list[Path]] = {}
-    for p in mesh_src_root.rglob("*"):
-        if p.is_file():
-            index.setdefault(p.name, []).append(p)
-
     copied = 0
     scaled = 0
     for basename in sorted(referenced):
-        matches = index.get(basename, [])
-        if not matches:
-            print(f"  WARNING: mesh not found: {basename}")
+        src = mesh_src_root / mesh_sources[basename]
+        if not src.is_file():
+            print(f"  WARNING: mesh not found: {src}")
             continue
-        if len({m.stat().st_size for m in matches}) > 1:
-            print(
-                f"  WARNING: basename collision for {basename} "
-                f"({len(matches)} distinct files); using {matches[0]}"
-            )
-        src = matches[0]
         dst = mesh_out / basename
         scale = [float(v) for v in mesh_scales.get(basename, "1 1 1").split()]
         if any(abs(s - 1.0) > 1e-12 for s in scale):
@@ -584,7 +592,7 @@ def main() -> None:
     total_stages = 7 if args.repair_meshes else 6
 
     print(f"\n[1/{total_stages}] Preprocessing URDF...")
-    preprocessed, mesh_scales = preprocess_urdf(urdf_path)
+    preprocessed, mesh_scales, mesh_sources = preprocess_urdf(urdf_path)
     _write_xml(preprocessed, out_dir / "wheelchair.urdf")
     # The wheelchair shares visual and collision meshes, so the visualization
     # URDF is identical to the planning URDF.
@@ -611,7 +619,7 @@ def main() -> None:
         _write_xml(srdf_tree, srdf_path)
 
     print(f"\n[5/{total_stages}] Copying meshes...")
-    copy_meshes(preprocessed, mesh_src_dir, out_dir, mesh_scales)
+    copy_meshes(preprocessed, mesh_src_dir, out_dir, mesh_scales, mesh_sources)
 
     if args.repair_meshes:
         print(f"\n[6/{total_stages}] Repairing collision meshes...")
