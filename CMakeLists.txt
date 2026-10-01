@@ -13,6 +13,11 @@ if(POLICY CMP0167)
     cmake_policy(SET CMP0167 OLD)
 endif()
 set(Boost_NO_BOOST_CMAKE ON)
+# Legacy FindBoost searches /usr/include before the conda prefix, so a system
+# Boost would shadow pixi's and the conda g++ (no /usr/include) can't see it.
+if(DEFINED ENV{CONDA_PREFIX} AND NOT DEFINED BOOST_ROOT)
+    set(BOOST_ROOT "$ENV{CONDA_PREFIX}")
+endif()
 
 # ── Dependencies ──────────────────────────────────────────────────────
 
