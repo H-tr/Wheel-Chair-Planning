@@ -76,3 +76,23 @@ def test_unreachable_goal_is_not_solved():
     result = planner.plan(start, goal)
     assert result.status == PlanningStatus.FAILED
     assert result.path is None
+
+
+@pytest.mark.parametrize("name", ["pdst", "kpiece", "bkpiece", "lbkpiece", "stride"])
+def test_partial_motions_stop_at_the_wall(name):
+    """These planners grow from the last valid state of a blocked motion."""
+    from wheelchair_planning.planning import create_planner
+    from wheelchair_planning.types import PlannerConfig
+
+    ys = np.arange(-1.0, 1.0 + 1e-9, 0.02)
+    wall = _vertical_surface(np.full(ys.shape, 2.0), ys)
+    planner = create_planner(
+        "wheelchair_base",
+        config=PlannerConfig(planner_name=name, time_limit=1.0, simplify=False),
+        pointcloud=wall,
+    )
+    start, goal = np.zeros(3), np.array([4.0, 0.0, 0.0])
+    for _ in range(5):
+        result = planner.plan(start, goal)
+        assert result.success
+        assert all(planner.validate_batch(result.path))
