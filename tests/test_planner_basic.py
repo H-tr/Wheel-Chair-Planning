@@ -23,6 +23,16 @@ def test_available_robots_includes_known_subgroups():
     assert "wheelchair_whole_body" in names
 
 
+def test_unknown_robot_raises():
+    from wheelchair_planning.planning import create_planner
+
+    with pytest.raises(ValueError, match="Unknown robot name"):
+        create_planner("wheelchair_left_arm")
+    planner = create_planner("wheelchair_arm")
+    with pytest.raises(ValueError, match="Unknown robot name"):
+        planner.set_subgroup("wheelchair_dual_arm")
+
+
 def test_subgroup_inputs_are_checked(home_joints):
     from wheelchair_planning._ompl_vamp import OmplVampPlanner
 

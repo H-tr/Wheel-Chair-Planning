@@ -58,6 +58,11 @@ class MotionPlanner:
             wheelchair_robot_config,
         )
 
+        if robot_name not in available_robots():
+            raise ValueError(
+                f"Unknown robot name '{robot_name}'. Use one of: {available_robots()}"
+            )
+
         if config is None:
             config = PlannerConfig()
 
@@ -396,6 +401,10 @@ class MotionPlanner:
             wheelchair_robot_config,
         )
 
+        if robot_name not in available_robots():
+            raise ValueError(
+                f"Unknown robot name '{robot_name}'. Use one of: {available_robots()}"
+            )
         if base_config is not None:
             self._base_config = np.asarray(base_config, dtype=np.float64).copy()
         self._robot_name = robot_name
