@@ -34,8 +34,9 @@ class TestPlannerConfig:
         with pytest.raises(ValueError, match="Unknown planner"):
             PlannerConfig(planner_name="not_a_real_planner")
 
-    # FCIT* and AORRTC are VAMP planners; no OMPL planner stands in for them.
-    @pytest.mark.parametrize("name", ["fcit", "aorrtc"])
+    # FCIT* and AORRTC are VAMP planners (no OMPL planner stands in for
+    # them); STRRT* needs a space-time state space.
+    @pytest.mark.parametrize("name", ["fcit", "aorrtc", "strrtstar"])
     def test_unsupported_planner_names_rejected(self, name: str):
         with pytest.raises(ValueError, match="Unknown planner"):
             PlannerConfig(planner_name=name)
