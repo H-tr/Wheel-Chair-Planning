@@ -180,6 +180,10 @@ class OmplVampPlanner:
                 planner will plan over, in DOF order.
             frozen_config: 10-DOF stance to inject for every joint *not*
                 in ``active_indices``.
+
+        Raises:
+            ValueError: If ``frozen_config`` does not have 10 entries, an
+                index is outside ``[0, 10)`` or an index repeats.
         """
         ...
 
@@ -454,6 +458,10 @@ class OmplVampPlanner:
                 planner will plan over, in DOF order.
             frozen_config: 10-DOF stance to inject for every joint *not*
                 in ``active_indices``.
+
+        Raises:
+            ValueError: If ``frozen_config`` does not have 10 entries, an
+                index is outside ``[0, 10)`` or an index repeats.
         """
         ...
 

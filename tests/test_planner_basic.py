@@ -23,6 +23,20 @@ def test_available_robots_includes_known_subgroups():
     assert "wheelchair_whole_body" in names
 
 
+def test_subgroup_inputs_are_checked(home_joints):
+    from wheelchair_planning._ompl_vamp import OmplVampPlanner
+
+    with pytest.raises(ValueError):
+        OmplVampPlanner([0, 1, 2], home_joints[:9].tolist())
+    with pytest.raises(ValueError):
+        OmplVampPlanner([0, 1, 10], home_joints.tolist())
+    with pytest.raises(ValueError):
+        OmplVampPlanner([3, 4, 3], home_joints.tolist())
+    planner = OmplVampPlanner()
+    with pytest.raises(ValueError):
+        planner.set_subgroup([0, 1, 2], home_joints.tolist() + [0.0])
+
+
 def test_base_subgroup_checks_the_frozen_arm(home_joints):
     from wheelchair_planning.planning import SymbolicContext, create_planner
 
