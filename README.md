@@ -37,7 +37,7 @@ mobile manipulator (a 3-DOF planar wheelchair base + a 7-DOF xArm7 arm).
 
 ## Quick Start
 
-**Platform**: Linux x86_64 (AVX2), Python 3.12–3.14.
+**Platform**: Linux x86_64 (AVX2), Python 3.12–3.15.
 
 For inference — running the planners and IK solvers — pip install:
 
@@ -100,7 +100,7 @@ wheelchair_planning/   # Core Python package
   planning/            # VAMP motion planning, cost + constrained planners
   trajectory/          # TOPP-RA time parameterization
   envs/                # Simulation environments (PyBullet)
-  types/               # Shared dataclasses (Pose, JointState, ...)
+  types/               # Shared dataclasses (SE3Pose, PlannerConfig, ...)
   resources/           # Packaged URDFs and asset loaders
 third_party/
   vamp/                # SIMD-accelerated motion planning (submodule)

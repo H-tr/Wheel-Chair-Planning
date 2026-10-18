@@ -19,7 +19,7 @@ from wheelchair_planning.kinematics import create_ik_solver
 from wheelchair_planning.types import IKConfig, SE3Pose, SolveType
 
 solver = create_ik_solver(
-    "left_arm",
+    "arm",
     config=IKConfig(
         timeout=0.2,          # seconds per attempt
         epsilon=1e-5,          # convergence tolerance
@@ -30,7 +30,7 @@ solver = create_ik_solver(
     ),
 )
 
-home = HOME_JOINTS[JOINT_GROUPS["left_arm"]]
+home = HOME_JOINTS[JOINT_GROUPS["arm"]]
 ee = solver.fk(home)                    # forward kinematics
 
 target = SE3Pose(
@@ -51,7 +51,7 @@ valid solutions exist in the timeout window:
 | `SPEED` | whichever solver finishes first |
 | `DISTANCE` | solution closest to the seed |
 | `MANIP1` | solution with highest manipulability (Jacobian SVD product) |
-| `MANIP2` | same, but normalised by the largest singular value |
+| `MANIP2` | solution with highest isotropy (smallest / largest Jacobian singular value) |
 
 ## When to use
 

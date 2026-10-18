@@ -1,7 +1,7 @@
 """
 Pinocchio-based forward kinematics and Jacobian computation.
 
-Used by motion planning. IK solving is handled by trac_ik_solver.py.
+IK solving is handled by trac_ik_solver.py and pink_ik_solver.py.
 """
 
 from __future__ import annotations

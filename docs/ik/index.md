@@ -15,9 +15,8 @@ Both backends cover the same kinematic chains:
 
 | Chain | DOF | Span |
 |---|---|---|
-| `left_arm`, `right_arm` | 7 | shoulder → wrist |
-| `whole_body_left`, `whole_body_right` | 11 | legs + waist + arm |
-| `whole_body_base_left`, `whole_body_base_right` | 14 | floating base + legs + waist + arm |
+| `arm` | 7 | xArm7, `link_base` → `link_tcp` |
+| `whole_body` | 10 | planar base + arm, `Link_Zero_Point` → `link_tcp` |
 
 Pick the chain with `create_ik_solver("chain_name", ...)` — see the
 `JOINT_GROUPS` table in `wheelchair_planning.wheelchair` for the mapping

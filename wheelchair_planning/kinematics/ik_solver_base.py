@@ -101,7 +101,7 @@ def create_ik_solver(
     """Factory function to create an IK solver for a named chain.
 
     Input:
-        chain_name: Name of the chain (e.g. "left_arm", "whole_body").
+        chain_name: Name of the chain ("arm" or "whole_body").
         config: IK configuration — ``IKConfig`` for trac_ik,
             ``PinkIKConfig`` for pink (uses defaults if None).
         side: Optional "left" or "right" suffix for compound names.
@@ -115,9 +115,9 @@ def create_ik_solver(
         An IKSolverBase instance (TracIKSolver or PinkIKSolver).
 
     Examples:
-        create_ik_solver("left_arm")
-        create_ik_solver("whole_body", side="left")
-        create_ik_solver("whole_body", side="left", backend="pink",
+        create_ik_solver("arm")
+        create_ik_solver("whole_body")
+        create_ik_solver("whole_body", backend="pink",
                          config=PinkIKConfig(com_cost=0.1))
     """
     chain_config = _resolve_chain_config(chain_name, side, urdf_path)

@@ -19,7 +19,7 @@ a unified Python API.
     required, no ROS, no MoveIt. Vendor it into any project with a
     single `pip install -e .`.
 
--   :material-source-branch:{ .lg .middle } __31 planners__
+-   :material-source-branch:{ .lg .middle } __30 planners__
 
     ---
 
@@ -95,7 +95,7 @@ with how they were measured, are in
 For inference — running the planners and IK solvers — just pip install:
 
 ```bash
-git clone --recursive https://github.com/AdaCompNUS/Wheel-Chair-Planning.git
+git clone --recursive https://github.com/H-tr/Wheel-Chair-Planning.git
 cd Wheel-Chair-Planning
 pip install -e .
 ```

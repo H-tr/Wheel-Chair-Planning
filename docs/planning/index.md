@@ -7,7 +7,7 @@
     ---
 
     All of [OMPL](https://ompl.kavrakilab.org/)'s mature sampling-based
-    planners (31 exposed), driven by one uniform Python call. No glue
+    planners (30 exposed), driven by one uniform Python call. No glue
     code to swap planners — change a string.
 
 -   __VAMP backend__
@@ -65,20 +65,20 @@ accepts any of:
 
     | Family | Planners |
     |---|---|
-    | RRT | `rrtc`, `rrt`, `trrt`, `bitrrt`, `strrtstar`, `lbtrrt` |
+    | RRT | `rrtc`, `rrt`, `trrt`, `bitrrt` |
     | KPIECE | `kpiece`, `bkpiece`, `lbkpiece` |
-    | PRM | `prm`, `lazyprm`, `spars`, `spars2` |
+    | PRM | `prm`, `lazyprm` |
     | Exploration | `est`, `biest`, `sbl`, `stride`, `pdst` |
-    | RRT\*-feasible | `rrtsharp`, `rrtxstatic` |
 
 === "Asymptotically optimal (keep refining until budget)"
 
     | Family | Planners |
     |---|---|
-    | RRT\* | `rrtstar`, `informed_rrtstar` |
+    | RRT\* | `rrtstar`, `informed_rrtstar`, `rrtsharp`, `rrtxstatic` |
     | Informed trees | `bitstar`, `abitstar`, `aitstar`, `eitstar`, `blitstar` |
     | FMT | `fmt`, `bfmt` |
     | PRM\* | `prmstar`, `lazyprmstar` |
+    | Near-optimal | `lbtrrt`, `spars`, `spars2` |
 
 ## Benchmarks
 
@@ -255,9 +255,13 @@ the same pipeline is exposed as standalone methods on `MotionPlanner`
   shortcutting is known-safe.
 
 ```python
+planner = create_planner(
+    "wheelchair_arm",
+    config=PlannerConfig(simplify=False, interpolate=False),
+)
 result = planner.plan(start, goal)                     # unsimplified, raw
 smooth = planner.simplify_path(result.path, time_limit=1.0)
-dense  = planner.interpolate_path(smooth, resolution=128.0)     # or count=200
+dense  = planner.interpolate_path(smooth, resolution=128.0)     # or count=200, resolution=0.0
 ```
 
 Both methods reuse the planner's collision environment and

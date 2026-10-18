@@ -309,9 +309,7 @@ class FlaskPlanner {
   /// VAMP's straight-edge density (``resolution`` samples per unit of
   /// config-space arc length; 1.1 covers chord sums underestimating the
   /// arc).  Like VAMP's own edges this is collision-free up to the
-  /// sampling resolution: on Fetch-Planning's demo scene ~0.4% of whole-body
-  /// trajectories graze an obstacle for ~10 ms between two samples.
-  /// Inflate obstacles (``point_radius``) for a clearance margin.
+  /// sampling resolution.
   static constexpr double kCollisionDensity = 1.1;
 
   const VampEnv& env_;

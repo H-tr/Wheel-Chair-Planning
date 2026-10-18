@@ -48,7 +48,7 @@ class Constraint:
         1. symbolic Jacobian via ``ca.jacobian(residual, q_sym)``
         2. C code generation via CasADi
         3. compilation to a ``.so`` with ``c++ -O3 -shared -fPIC``
-        4. caching under ``~/.cache/wheelchair_planning/constraints/<sha>/``
+        4. caching under ``~/.cache/wheelchair_planning/constraints/<sha[:2]>/<sha[2:]>/``
 
     On a cache hit the whole thing is a single ``stat`` + string compare.
     """

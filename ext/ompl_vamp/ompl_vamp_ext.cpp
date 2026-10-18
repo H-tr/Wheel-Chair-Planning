@@ -1,10 +1,10 @@
 /**
  * OMPL + VAMP Python extension — nanobind bindings.
  *
- * The actual planner, validity checkers, constraint primitives, and
- * pinocchio robot loader live in self-contained internal headers
- * under this directory.  This file is intentionally kept thin: it
- * only imports those headers and exposes the C++ API to Python via
+ * The actual planner, validity checkers, constraint and cost adapters,
+ * and the FLASK kinodynamic planner live in self-contained internal
+ * headers under this directory.  This file is intentionally kept thin:
+ * it only imports those headers and exposes the C++ API to Python via
  * nanobind.  If you find yourself adding more than a few lines of
  * non-binding code here, that's a sign it belongs in one of the
  * internal headers instead.

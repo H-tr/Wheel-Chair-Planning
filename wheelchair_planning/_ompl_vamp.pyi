@@ -50,8 +50,9 @@ class KinodynamicSettings:
     """Parameters of ``OmplVampPlanner.plan_kinodynamic`` (FLASK).
 
     See ``ext/ompl_vamp/plan_kinodynamic.hpp`` for field semantics;
-    :class:`wheelchair_planning.types.KinodynamicConfig` fills them from
-    the robot limits in :mod:`wheelchair_planning.wheelchair`.
+    :meth:`wheelchair_planning.planning.MotionPlanner.plan_kinodynamic`
+    fills them from a :class:`wheelchair_planning.types.KinodynamicConfig`
+    and the robot limits in :mod:`wheelchair_planning.wheelchair`.
     """
 
     max_velocity: list[float]
@@ -273,7 +274,7 @@ class OmplVampPlanner:
             symbol_name: CasADi function symbol name inside the library.
             ambient_dim: Dimension of the joint space (must match
                 :meth:`dimension`).
-            weight: Positive scalar multiplier applied to the cost.
+            weight: Non-negative scalar multiplier applied to the cost.
         """
         ...
 
@@ -443,6 +444,35 @@ class OmplVampPlanner:
         :meth:`set_subgroup` / :meth:`set_full_body`."""
         ...
 
+    def filter_pointcloud(
+        self,
+        points: Sequence[Sequence[float]],
+        min_dist: float,
+        max_range: float,
+        origin: Sequence[float],
+        workspace_min: Sequence[float],
+        workspace_max: Sequence[float],
+        cull: bool = True,
+    ) -> list[list[float]]:
+        """Spatially downsample ``points`` via Morton-curve sorting.
+
+        Keeps one point per ``min_dist`` neighbourhood and, with
+        ``cull``, drops points farther than ``max_range`` from ``origin``
+        or outside ``[workspace_min, workspace_max]``.
+        """
+        ...
+
+    def filter_self_from_pointcloud(
+        self,
+        points: Sequence[Sequence[float]],
+        point_radius: float,
+        config: Sequence[float],
+    ) -> list[list[float]]:
+        """Drop the points whose sphere of radius ``point_radius`` overlaps
+        a robot collision sphere at ``config`` (active DOF) or an obstacle
+        of the environment."""
+        ...
+
     def set_subgroup(
         self,
         active_indices: Sequence[int],
@@ -450,8 +480,8 @@ class OmplVampPlanner:
     ) -> None:
         """Switch to a different subgroup without rebuilding the environment.
 
-        Clears all constraints.  The pointcloud and collision geometry
-        are preserved.
+        Clears all constraints and costs.  The pointcloud and collision
+        geometry are preserved.
 
         Args:
             active_indices: Positions in the full 10-DOF body that this
@@ -468,7 +498,7 @@ class OmplVampPlanner:
     def set_full_body(self) -> None:
         """Switch back to full-body planning (10 DOF).
 
-        Clears all constraints.  The pointcloud and collision geometry
-        are preserved.
+        Clears all constraints and costs.  The pointcloud and collision
+        geometry are preserved.
         """
         ...

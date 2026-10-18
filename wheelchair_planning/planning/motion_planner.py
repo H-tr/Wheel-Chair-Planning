@@ -388,7 +388,7 @@ class MotionPlanner:
     ) -> None:
         """Switch active joints without rebuilding the collision environment.
 
-        Clears all constraints.  The pointcloud is preserved.
+        Clears all constraints and costs.  The pointcloud is preserved.
 
         Args:
             robot_name: Subgroup name from ``PLANNING_SUBGROUPS``, or

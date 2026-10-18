@@ -60,7 +60,7 @@ class Cost:
         1. symbolic gradient via ``ca.gradient(expression, q_sym)``
         2. C code generation via CasADi
         3. compilation to a ``.so`` with ``c++ -O3 -shared -fPIC``
-        4. caching under ``~/.cache/wheelchair_planning/costs/<sha>/``
+        4. caching under ``~/.cache/wheelchair_planning/costs/<sha[:2]>/<sha[2:]>/``
 
     The C++ planner wraps the loaded function in an OMPL
     ``StateCostIntegralObjective`` — so per-state values are
