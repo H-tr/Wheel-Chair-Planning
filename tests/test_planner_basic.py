@@ -23,6 +23,18 @@ def test_available_robots_includes_known_subgroups():
     assert "wheelchair_whole_body" in names
 
 
+def test_base_subgroup_checks_the_frozen_arm(home_joints):
+    from wheelchair_planning.planning import SymbolicContext, create_planner
+
+    eef = SymbolicContext("wheelchair").evaluate_link_pose("link_eef", home_joints)
+    swung = home_joints.copy()
+    swung[3] = 1.5  # joint1 turns the arm away from the obstacle
+    for arm, valid in [(home_joints, False), (swung, True)]:
+        planner = create_planner("wheelchair_base", base_config=arm)
+        planner._planner.add_sphere(np.asarray(eef)[:3, 3].tolist(), 0.02)
+        assert planner.validate(np.zeros(3)) == valid
+
+
 def test_planner_dimension_matches_subgroup(arm_planner):
     # The arm is the 7-DOF chain in PLANNING_SUBGROUPS.
     assert arm_planner._ndof == 7
