@@ -19,7 +19,7 @@ a unified Python API.
     required, no ROS, no MoveIt. Vendor it into any project with a
     single `pip install -e .`.
 
--   :material-source-branch:{ .lg .middle } __26 planners__
+-   :material-source-branch:{ .lg .middle } __31 planners__
 
     ---
 
@@ -27,12 +27,13 @@ a unified Python API.
     RRT\*, BIT\*, AIT\*, EIT\*, KPIECE, PRM, FMT, SPARS, … plug in
     whichever suits the problem.
 
--   :material-speedometer:{ .lg .middle } __Microsecond checks, millisecond plans__
+-   :material-speedometer:{ .lg .middle } __Millisecond plans__
 
     ---
 
-    VAMP SIMD collision backend: **~3 μs per check**. RRT-Connect plans
-    a **1.1 ms** collision-free path for the 7-, 14-, and 10-DOF body.
+    VAMP SIMD collision backend: RRT-Connect plans around a table in
+    milliseconds for the arm, the base and the whole body
+    ([benchmarks](planning/index.md#benchmarks)).
 
 </div>
 
@@ -54,8 +55,8 @@ a unified Python API.
     ---
 
     OMPL frontend + VAMP SIMD backend. Full-body and subgroup planning
-    (single-arm, dual-arm, torso + arm, base, whole-body) with
-    first-class support for point-cloud obstacles.
+    (arm, base, whole body) with first-class support for point-cloud
+    obstacles.
 
 -   :material-vector-curve:{ .lg .middle } [__Manifold Planning__](planning/manifold.md)
 
@@ -85,32 +86,9 @@ a unified Python API.
 
 ## Benchmarks
 
-Median / p95 wall-clock for a single **search** (simplification and
-interpolation disabled), N = 20 runs per cell, plans from the home
-pose to a sampled collision-free goal around a tabletop point-cloud
-obstacle (same scene as `examples/planning/motion.py`).
-
-| Planner | Left arm (7 DOF) | Dual arm (14 DOF) | Full body (10 DOF) |
-|---|---:|---:|---:|
-| RRT-Connect | **1.1 / 1.1 ms** | **1.1 / 1.2 ms** | **1.1 / 1.1 ms** |
-| KPIECE | 1.1 / 2.3 ms | 1.7 / 3.2 ms | 1.1 / 4.3 ms |
-| PRM | 1.1 / 3.2 ms | 1.1 / 3.2 ms | 2.2 / 4.2 ms |
-| SBL | 1.1 / 1.1 ms | 2.2 / 3.3 ms | 8.5 / 17.0 ms |
-| EST / BiEST | 1.1 / 4.3 ms | 2.1 / 5.3 ms | 2.2 / 6.4 ms |
-| STRIDE | 2.2 / 3.2 ms | 2.7 / 8.5 ms | 2.2 / 3.3 ms |
-
-Raw `planner.validate(config)` throughput: **3.2 μs / check** (Python
-boundary included) ≈ **0.31 M checks / s**. Batched
-[`planner.validate_batch(configs)`](planning/index.md#standalone-collision-checking)
-packs up to `rake` distinct configs per SIMD block for an **~8.5×**
-best-case speedup on all-valid workloads.
-
-!!! note "Environment"
-    13th Gen Intel Core i9-13900KF, 24 logical cores · Linux 6.8 ·
-    Python 3.12.13. Reproduce with
-    `pixi run -e dev python scripts/benchmarks/motion_planning.py`.
-    See [planning](planning/index.md) for the full planner sweep including
-    asymptotically-optimal variants (RRT\*, BIT\*, AIT\*, EIT\*, FMT).
+Planning times of every planner on the arm, the base and the whole body,
+with how they were measured, are in
+[Motion Planning](planning/index.md#benchmarks).
 
 ## Quick Install
 

@@ -7,7 +7,7 @@
     ---
 
     All of [OMPL](https://ompl.kavrakilab.org/)'s mature sampling-based
-    planners (26 exposed), driven by one uniform Python call. No glue
+    planners (31 exposed), driven by one uniform Python call. No glue
     code to swap planners — change a string.
 
 -   __VAMP backend__
@@ -16,7 +16,7 @@
 
     Collision checking runs through [VAMP](https://github.com/KavrakiLab/vamp)'s
     SIMD-vectorised sphere pipeline. Point-cloud obstacles are
-    broadphase-indexed and checked in **~3 μs per config**.
+    broadphase-indexed.
 
 -   __C++ hot path__
 
@@ -82,41 +82,43 @@ accepts any of:
 
 ## Benchmarks
 
-Median / p95 wall-clock for a single **search** (simplification and
-interpolation disabled), N = 20 runs per cell, plans from the home
-pose to a sampled collision-free goal around a tabletop point-cloud
-obstacle (same scene as `examples/planning/motion.py`).
+Median / p95 planning time of a single **search** (simplification and
+interpolation disabled), N = 20 runs per cell, from the home pose to a
+sampled collision-free goal around the table point cloud of
+`examples/planning/motion.py`. Every run in every cell found a path.
 
 ### Feasibility planners — time to first solution
 
-| Planner | Left arm (7 DOF) | Dual arm (14 DOF) | Full body (10 DOF) |
+| Planner | Arm (7 DOF) | Base (3 DOF) | Whole body (10 DOF) |
 |---|---:|---:|---:|
-| `rrtc` | 1.1 / 1.1 ms | 1.1 / 1.2 ms | 1.1 / 1.1 ms |
-| `rrt` | 2.2 / 3.3 ms | 3.2 / 5.3 ms | 2.2 / 10.6 ms |
-| `kpiece` | 1.1 / 2.3 ms | 1.7 / 3.2 ms | 1.1 / 4.3 ms |
-| `bkpiece` | 2.2 / 3.3 ms | 8.5 / 19.2 ms | 34.8 / 71.7 ms |
-| `lbkpiece` | 2.1 / 2.2 ms | 8.5 / 15.9 ms | 113.4 / 164.5 ms |
-| `prm` | 1.1 / 3.2 ms | 1.1 / 3.2 ms | 2.2 / 4.2 ms |
-| `lazyprm` | 1.1 / 1.2 ms | 3.7 / 79.1 ms | 3.2 / 12.7 ms |
-| `est` | 1.1 / 4.3 ms | 2.1 / 5.3 ms | 2.2 / 6.4 ms |
-| `biest` | 1.1 / 2.2 ms | 3.3 / 6.4 ms | 2.2 / 4.3 ms |
-| `sbl` | 1.1 / 1.1 ms | 2.2 / 3.3 ms | 8.5 / 17.0 ms |
-| `stride` | 2.2 / 3.2 ms | 2.7 / 8.5 ms | 2.2 / 3.3 ms |
+| `rrtc` | 2.25 / 4.38 ms | 1.14 / 1.23 ms | 2.19 / 3.26 ms |
+| `rrt` | 6.48 / 1008.44 ms | 3.26 / 7.68 ms | 8.04 / 696.35 ms |
+| `kpiece` | 6.60 / 34.11 ms | 2.22 / 7.43 ms | 7.54 / 31.83 ms |
+| `bkpiece` | 8.69 / 15.99 ms | 3.89 / 7.48 ms | 49.24 / 98.79 ms |
+| `lbkpiece` | 9.60 / 16.12 ms | 3.35 / 5.51 ms | 56.96 / 86.09 ms |
+| `prm` | 18.57 / 46.76 ms | 109.83 / 257.67 ms | 11.71 / 405.92 ms |
+| `lazyprm` | 4.35 / 26.90 ms | 1.19 / 2.33 ms | 4.29 / 14.95 ms |
+| `est` | 6.03 / 46.79 ms | 4.33 / 14.86 ms | 11.80 / 37.19 ms |
+| `biest` | 4.40 / 7.56 ms | 1.20 / 3.31 ms | 4.38 / 9.60 ms |
+| `sbl` | 6.51 / 13.01 ms | 2.19 / 2.32 ms | 14.35 / 37.29 ms |
+| `stride` | 6.58 / 49.77 ms | 2.19 / 5.41 ms | 14.89 / 32.18 ms |
 
 ### Asymptotically-optimal planners — median path cost after a 1.0 s budget
 
-| Planner | Left arm | Dual arm | Full body |
+| Planner | Arm | Base | Whole body |
 |---|---:|---:|---:|
-| `rrtstar` | 4.18 | 9.16 | 15.54 |
-| `bitstar` | 4.05 | 5.21 | 16.65 |
-| `aitstar` | 4.20 | 6.43 | 17.10 |
-| `eitstar` | 4.11 | 6.01 | 14.59 |
-| `fmt` | 4.55 | 6.21 | 14.35 |
+| `rrtstar` | 11.33 | 7.08 | 17.53 |
+| `bitstar` | 9.92 | 8.60 | 16.23 |
+| `aitstar` | 10.84 | 9.61 | 21.26 |
+| `eitstar` | 9.43 | 6.72 | 16.88 |
+| `fmt` | 10.33 | 8.69 | 14.83 |
 
-!!! note "Environment"
-    13th Gen Intel Core i9-13900KF, 24 logical cores · Linux 6.8 ·
-    Python 3.12.13. Reproduce with
-    `pixi run -e dev python scripts/benchmarks/motion_planning.py`.
+!!! note "Measurement"
+    `pixi run -e dev python scripts/benchmarks/motion_planning.py`, commit
+    `ed1939a` plus the benchmark's subgroup and scene fix, 2026-10-19,
+    AMD EPYC 7543 (128 logical CPUs, shared with other jobs, load 5–11) ·
+    Linux 6.8 · Python 3.14.7. p95 is the script's nearest-rank value.
+    Raw output: `/nas/pollux/tianrun/wheelchair_flask/geo_benchmark.txt`.
 
 ## Minimal example
 
@@ -284,14 +286,8 @@ interpolated samples along an edge, fed independent configs per lane
 instead. Per-config result is preserved: when a packed block fails,
 only that block falls back to per-lane checks.
 
-| Workload (4096 configs, AVX) | `validate` loop | `validate_batch` | Speedup |
-|---|---:|---:|---:|
-| All valid (best case) | 15.1 ms | 1.8 ms | **~8.5×** |
-| 72% valid, mixed | 15.4 ms | 9.2 ms | ~1.7× |
-
-Best case saturates the rake-8 SIMD width. Mixed-validity pays the
-fallback for blocks with any invalid lane; the common "which of these
-random samples is valid?" workload still wins.
+A block of valid configurations costs one SIMD sweep; a block with an
+invalid lane pays the per-lane fallback.
 
 ```python
 # Example: filter 1000 candidate goals by validity.
@@ -308,9 +304,8 @@ good_goals = goals[mask]
 
     ---
 
-    Plan over a slice of the 10-DOF body — single arm, dual arm,
-    torso + arm, base, height chain, whole body — with the remaining
-    joints pinned to any 10-DOF stance.
+    Plan over a slice of the 10-DOF body — the arm, the base, or the
+    whole body — with the remaining joints pinned to any 10-DOF stance.
 
 -   [__Manifold planning__](manifold.md)
 
