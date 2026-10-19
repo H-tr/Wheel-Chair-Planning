@@ -195,7 +195,7 @@ NB_MODULE(_ompl_vamp, m) {
       .def("plan", &OmplVampPlanner::plan, nb::arg("start"), nb::arg("goal"),
            nb::arg("planner_name") = "rrtc", nb::arg("time_limit") = 10.0,
            nb::arg("simplify") = true, nb::arg("interpolate") = true,
-           nb::arg("interpolate_count") = 0, nb::arg("resolution") = 64.0)
+           nb::arg("resolution") = 64.0)
       .def("plan_kinodynamic", &OmplVampPlanner::plan_kinodynamic,
            nb::arg("start"), nb::arg("start_velocity"), nb::arg("goal"),
            nb::arg("time_limit"), nb::arg("settings"),
@@ -212,8 +212,11 @@ NB_MODULE(_ompl_vamp, m) {
       .def("lower_bounds", &OmplVampPlanner::lower_bounds)
       .def("upper_bounds", &OmplVampPlanner::upper_bounds)
       .def("min_max_radii", &OmplVampPlanner::min_max_radii)
-      .def("set_base_bounds", &OmplVampPlanner::set_base_bounds,
-           nb::arg("x_lo"), nb::arg("x_hi"), nb::arg("y_lo"), nb::arg("y_hi"))
+      .def_static("default_joint_limits",
+                  &OmplVampPlanner::default_joint_limits)
+      .def("joint_limits", &OmplVampPlanner::joint_limits)
+      .def("set_joint_limits", &OmplVampPlanner::set_joint_limits,
+           nb::arg("lower"), nb::arg("upper"))
       .def("filter_pointcloud", &OmplVampPlanner::filter_pointcloud,
            nb::arg("points"), nb::arg("min_dist"), nb::arg("max_range"),
            nb::arg("origin"), nb::arg("workspace_min"),

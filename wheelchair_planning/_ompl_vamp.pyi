@@ -285,7 +285,6 @@ class OmplVampPlanner:
         time_limit: float = 10.0,
         simplify: bool = True,
         interpolate: bool = True,
-        interpolate_count: int = 0,
         resolution: float = 64.0,
     ) -> PlanResult:
         """Plan a collision-free path from ``start`` to ``goal``.
@@ -298,20 +297,13 @@ class OmplVampPlanner:
             time_limit: Solver time limit in seconds.
             simplify: If true, run ``SimpleSetup::simplifySolution`` on the
                 returned path.
-            interpolate: If true, densify the simplified path.  Density
-                is picked by ``interpolate_count`` when it is ``> 0``,
-                otherwise by ``resolution`` when it is ``> 0``, otherwise
-                by OMPL's default longest-valid-segment fraction.
-            interpolate_count: Target total waypoint count for the whole
-                path.  OMPL distributes states across edges proportionally
-                to their length.  ``0`` disables this knob.  Cannot be
-                combined with ``resolution``.
+            interpolate: If true, densify the simplified path by
+                ``resolution``.
             resolution: Waypoints per unit of state-space distance.  Each
                 edge of length ``d`` is split into ``ceil(d * resolution)``
                 equal segments, so higher values give denser paths.
                 Default ``64.0``.  Set to ``0.0`` to fall back to OMPL's
-                default interpolator.  Cannot be combined with
-                ``interpolate_count``.
+                default interpolator.
         """
         ...
 
@@ -427,10 +419,19 @@ class OmplVampPlanner:
         """
         ...
 
-    def set_base_bounds(
-        self, x_lo: float, x_hi: float, y_lo: float, y_hi: float
-    ) -> None:
-        """Bound the planar base's x / y (metres); persists across
+    @staticmethod
+    def default_joint_limits() -> tuple[list[float], list[float]]:
+        """The ``(lower, upper)`` limits compiled into the robot model, in
+        full-body order."""
+        ...
+
+    def joint_limits(self) -> tuple[list[float], list[float]]:
+        """The ``(lower, upper)`` limits in effect, in full-body order."""
+        ...
+
+    def set_joint_limits(self, lower: Sequence[float], upper: Sequence[float]) -> None:
+        """Replace the limits of every joint (full-body order); each needs
+        finite bounds with ``lower < upper``.  Persists across
         :meth:`set_subgroup` / :meth:`set_full_body`."""
         ...
 

@@ -64,7 +64,9 @@ def plan_leg(name, subgroup, cloud, start, goal, config):
         pointcloud=cloud,
     )
     # Base positions are sampled inside these bounds: keep them tight.
-    planner.set_base_bounds(-2.0, 3.0, -1.5, 1.5)
+    planner.set_joint_limits(
+        {"Joint_Virtual_X": (-2.0, 3.0), "Joint_Virtual_Y": (-1.5, 1.5)}
+    )
     result = planner.plan_kinodynamic(
         planner.extract_config(start), planner.extract_config(goal), config=config
     )

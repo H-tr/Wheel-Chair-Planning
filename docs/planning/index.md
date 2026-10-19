@@ -175,24 +175,30 @@ PlannerConfig(
     # constraints and costs.
     simplify=True,
 
-    # Resample the (simplified) path densely.  Pick one knob:
-    #
-    #   interpolate_count > 0   → exactly this many total waypoints,
-    #                             distributed proportionally to edge length
-    #   resolution > 0.0        → ceil(edge_length * resolution) samples
-    #                             per edge — cleanest "uniform density"
-    #                             option, scales naturally with DOF
-    #   both 0                  → OMPL's default longest-valid-segment
-    #                             fraction, usually too sparse for control
-    #
-    # The default (resolution=64.0) gives ~64 waypoints per unit of
+    # Resample the (simplified) path densely: each edge of length d
+    # gets ceil(d * resolution) segments; resolution=0.0 falls back to
+    # OMPL's default longest-valid-segment fraction, usually too sparse
+    # for control.  The default (64.0) gives ~64 waypoints per unit of
     # state-space distance, which is smooth enough for a 100 Hz control
     # loop and robust to low-frequency replanning.
     interpolate=True,
     resolution=64.0,
-    interpolate_count=0,
+
+    # Joint-range overrides by joint name, (lower, upper) in metres for
+    # the virtual base joints and radians otherwise.  Joints left out
+    # keep the range compiled into the robot model (the base spans
+    # ±10 m); the planner samples only inside these ranges.
+    joint_limits={"Joint_Virtual_X": (-2.0, 3.0), "Joint_Virtual_Y": (-1.5, 1.5)},
 )
 ```
+
+`planner.set_joint_limits(limits)` changes the ranges of an existing
+planner with the same semantics: joints left out take the compiled
+range (`None` restores every one), an unknown name or a range that is
+not finite with `lower < upper` raises `ValueError`, and the ranges are
+kept across `set_subgroup`. `planner.bounds` gives the active joints'
+ranges as `(lower, upper)` arrays and `planner.joint_limits` every
+joint's range by name.
 
 Typical recipes:
 
@@ -226,18 +232,6 @@ Typical recipes:
         time_limit=5.0,
         simplify=False,               # the shortcutter ignores custom cost/constraint
         resolution=64.0,
-    )
-    ```
-
-=== "Fixed waypoint count (e.g. 100 steps)"
-
-    ```python
-    PlannerConfig(
-        planner_name="rrtc",
-        time_limit=1.0,
-        interpolate=True,
-        interpolate_count=100,        # exactly 100 waypoints — mutually exclusive with resolution
-        resolution=0.0,
     )
     ```
 
