@@ -85,40 +85,45 @@ accepts any of:
 Median / p95 planning time of a single **search** (simplification and
 interpolation disabled), N = 20 runs per cell, from the home pose to a
 sampled collision-free goal around the table point cloud of
-`examples/planning/motion.py`. Every run in every cell found a path.
+`examples/planning/motion.py`. Only exact solutions count; every
+feasibility run found one.
 
 ### Feasibility planners — time to first solution
 
 | Planner | Arm (7 DOF) | Base (3 DOF) | Whole body (10 DOF) |
 |---|---:|---:|---:|
-| `rrtc` | 2.25 / 4.38 ms | 1.14 / 1.23 ms | 2.19 / 3.26 ms |
-| `rrt` | 6.48 / 1008.44 ms | 3.26 / 7.68 ms | 8.04 / 696.35 ms |
-| `kpiece` | 6.60 / 34.11 ms | 2.22 / 7.43 ms | 7.54 / 31.83 ms |
-| `bkpiece` | 8.69 / 15.99 ms | 3.89 / 7.48 ms | 49.24 / 98.79 ms |
-| `lbkpiece` | 9.60 / 16.12 ms | 3.35 / 5.51 ms | 56.96 / 86.09 ms |
-| `prm` | 18.57 / 46.76 ms | 109.83 / 257.67 ms | 11.71 / 405.92 ms |
-| `lazyprm` | 4.35 / 26.90 ms | 1.19 / 2.33 ms | 4.29 / 14.95 ms |
-| `est` | 6.03 / 46.79 ms | 4.33 / 14.86 ms | 11.80 / 37.19 ms |
-| `biest` | 4.40 / 7.56 ms | 1.20 / 3.31 ms | 4.38 / 9.60 ms |
-| `sbl` | 6.51 / 13.01 ms | 2.19 / 2.32 ms | 14.35 / 37.29 ms |
-| `stride` | 6.58 / 49.77 ms | 2.19 / 5.41 ms | 14.89 / 32.18 ms |
+| `rrtc` | 2.78 / 4.28 ms | 1.16 / 1.30 ms | 1.17 / 2.28 ms |
+| `rrt` | 6.00 / 423.95 ms | 3.30 / 6.62 ms | 11.71 / 71.21 ms |
+| `kpiece` | 22.29 / 165.93 ms | 3.32 / 8.52 ms | 30.46 / 77.76 ms |
+| `bkpiece` | 29.87 / 40.40 ms | 6.48 / 9.66 ms | 103.25 / 173.67 ms |
+| `lbkpiece` | 48.01 / 99.57 ms | 4.42 / 6.59 ms | 235.99 / 341.09 ms |
+| `prm` | 20.65 / 59.59 ms | 66.19 / 224.49 ms | 14.94 / 329.68 ms |
+| `lazyprm` | 7.09 / 14.90 ms | 1.16 / 1.28 ms | 5.96 / 17.00 ms |
+| `est` | 6.57 / 21.22 ms | 2.73 / 8.53 ms | 6.96 / 73.56 ms |
+| `biest` | 4.91 / 7.73 ms | 1.70 / 4.43 ms | 4.90 / 10.70 ms |
+| `sbl` | 9.13 / 13.90 ms | 2.21 / 3.34 ms | 17.07 / 36.31 ms |
+| `stride` | 41.96 / 175.51 ms | 3.28 / 14.87 ms | 26.61 / 73.45 ms |
+
+The KPIECE family, STRIDE and PDST use the motion check that reports
+the last valid state of a failed motion, which checks a failed motion
+one sample at a time.
 
 ### Asymptotically-optimal planners — median path cost after a 1.0 s budget
 
 | Planner | Arm | Base | Whole body |
 |---|---:|---:|---:|
-| `rrtstar` | 11.33 | 7.08 | 17.53 |
-| `bitstar` | 9.92 | 8.60 | 16.23 |
-| `aitstar` | 10.84 | 9.61 | 21.26 |
-| `eitstar` | 9.43 | 6.72 | 16.88 |
-| `fmt` | 10.33 | 8.69 | 14.83 |
+| `rrtstar` | 9.94 (19/20 solved) | 7.04 | 18.05 |
+| `bitstar` | 9.63 (19/20 solved) | 8.48 | 17.30 |
+| `aitstar` | 11.45 | 9.63 | 19.87 |
+| `eitstar` | 9.77 | 6.72 | 16.49 |
+| `fmt` | 9.63 | 8.68 | 15.48 |
 
 !!! note "Measurement"
     `pixi run -e dev python scripts/benchmarks/motion_planning.py`, commit
-    `ed1939a` plus the benchmark's subgroup and scene fix, 2026-10-19,
-    AMD EPYC 7543 (128 logical CPUs, shared with other jobs, load 5–11) ·
-    Linux 6.8 · Python 3.14.7. p95 is the script's nearest-rank value.
-    Raw output: `/nas/pollux/tianrun/wheelchair_flask/geo_benchmark.txt`.
+    `1f2ac01`, 2026-10-19, AMD EPYC 7543 (128 logical CPUs, shared with
+    other jobs, load 8–11) · Linux 6.8 · Python 3.14.7. p95 is the
+    script's nearest-rank value. Raw output:
+    `/nas/pollux/tianrun/wheelchair_flask/geo_benchmark.txt`.
 
 ## Minimal example
 
