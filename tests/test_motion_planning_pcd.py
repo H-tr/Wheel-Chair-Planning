@@ -52,3 +52,47 @@ def test_plan_around_table(table_pointcloud, home_joints):
         np.testing.assert_allclose(result.path[-1], goal, atol=1e-6)
         for q in result.path:
             assert planner.validate(q)
+
+
+def _vertical_surface(xs, ys, top=1.6, step=0.02):
+    """Points of the vertical surface over the polyline ``(xs, ys)``."""
+    z = np.arange(0.0, top + 1e-9, step)
+    return np.array([(x, y, h) for x, y in zip(xs, ys) for h in z], dtype=np.float32)
+
+
+def test_unreachable_goal_is_not_solved():
+    """OMPL's approximate solutions stop short of the goal: a failure."""
+    from wheelchair_planning.planning import create_planner
+    from wheelchair_planning.types import PlannerConfig, PlanningStatus
+
+    angle = np.arange(0.0, 2.0 * np.pi, 0.02 / 1.5)
+    ring = _vertical_surface(4.0 + 1.5 * np.cos(angle), 1.5 * np.sin(angle))
+    planner = create_planner(
+        "wheelchair_base", config=PlannerConfig(time_limit=0.5), pointcloud=ring
+    )
+    start, goal = np.zeros(3), np.array([4.0, 0.0, 0.0])
+    assert planner.validate(start) and planner.validate(goal)
+
+    result = planner.plan(start, goal)
+    assert result.status == PlanningStatus.FAILED
+    assert result.path is None
+
+
+@pytest.mark.parametrize("name", ["pdst", "kpiece", "bkpiece", "lbkpiece", "stride"])
+def test_partial_motions_stop_at_the_wall(name):
+    """These planners grow from the last valid state of a blocked motion."""
+    from wheelchair_planning.planning import create_planner
+    from wheelchair_planning.types import PlannerConfig
+
+    ys = np.arange(-1.0, 1.0 + 1e-9, 0.02)
+    wall = _vertical_surface(np.full(ys.shape, 2.0), ys)
+    planner = create_planner(
+        "wheelchair_base",
+        config=PlannerConfig(planner_name=name, time_limit=1.0, simplify=False),
+        pointcloud=wall,
+    )
+    start, goal = np.zeros(3), np.array([4.0, 0.0, 0.0])
+    for _ in range(5):
+        result = planner.plan(start, goal)
+        assert result.success
+        assert all(planner.validate_batch(result.path))

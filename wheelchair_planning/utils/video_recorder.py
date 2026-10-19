@@ -9,7 +9,7 @@ Typical usage::
 
     from wheelchair_planning.utils.video_recorder import VideoRecorder
 
-    with VideoRecorder(env, "output.mp4", camera=CameraView.front_left()) as rec:
+    with VideoRecorder(env, "output.mp4", camera=CameraView()) as rec:
         rec.hold(seconds=0.5)            # pause on the start pose
         rec.play_path(path, duration=6)  # interpolate smoothly through waypoints
         rec.hold(seconds=1.0)            # pause on the final pose

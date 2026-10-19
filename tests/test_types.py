@@ -34,19 +34,19 @@ class TestPlannerConfig:
         with pytest.raises(ValueError, match="Unknown planner"):
             PlannerConfig(planner_name="not_a_real_planner")
 
-    def test_legacy_names_rewritten(self):
-        with pytest.warns(DeprecationWarning):
-            cfg = PlannerConfig(planner_name="fcit")
-        assert cfg.planner_name == "rrtstar"
+    # FCIT* and AORRTC are VAMP planners (no OMPL planner stands in for
+    # them); STRRT* needs a space-time state space.
+    @pytest.mark.parametrize("name", ["fcit", "aorrtc", "strrtstar"])
+    def test_unsupported_planner_names_rejected(self, name: str):
+        with pytest.raises(ValueError, match="Unknown planner"):
+            PlannerConfig(planner_name=name)
 
     @pytest.mark.parametrize(
         "kwargs",
         [
             {"time_limit": 0},
             {"point_radius": 0},
-            {"interpolate_count": -1},
             {"resolution": -0.1},
-            {"interpolate_count": 5, "resolution": 1.0},
         ],
     )
     def test_invalid_args_rejected(self, kwargs):
@@ -99,14 +99,12 @@ class TestResultDataclasses:
             status=PlanningStatus.SUCCESS,
             path=np.zeros((2, 7)),
             planning_time_ns=0,
-            iterations=0,
             path_cost=0.0,
         )
         bad = PlanningResult(
             status=PlanningStatus.FAILED,
             path=None,
             planning_time_ns=0,
-            iterations=0,
             path_cost=float("inf"),
         )
         assert ok.success is True

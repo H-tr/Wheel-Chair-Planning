@@ -17,7 +17,7 @@ acceleration limits, with the base following diff-drive kinematics.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -28,21 +28,6 @@ from wheelchair_planning.types import (
     PlanningResult,
     PlanningStatus,
 )
-
-
-@runtime_checkable
-class MotionPlannerBase(Protocol):
-    """Protocol for motion planner backends."""
-
-    @property
-    def robot_name(self) -> str: ...
-
-    @property
-    def num_dof(self) -> int: ...
-
-    def plan(self, start: np.ndarray, goal: np.ndarray) -> PlanningResult: ...
-
-    def validate(self, configuration: np.ndarray) -> bool: ...
 
 
 class MotionPlanner:
@@ -72,6 +57,11 @@ class MotionPlanner:
             PLANNING_SUBGROUPS,
             wheelchair_robot_config,
         )
+
+        if robot_name not in available_robots():
+            raise ValueError(
+                f"Unknown robot name '{robot_name}'. Use one of: {available_robots()}"
+            )
 
         if config is None:
             config = PlannerConfig()
@@ -112,14 +102,11 @@ class MotionPlanner:
 
         self._ndof = self._planner.dimension()
 
+        if config.joint_limits:
+            self.set_joint_limits(config.joint_limits)
+
         if pointcloud is not None:
-            r_min, r_max = self._planner.min_max_radii()
-            self._planner.add_pointcloud(
-                np.asarray(pointcloud, dtype=np.float32).tolist(),
-                r_min,
-                r_max,
-                config.point_radius,
-            )
+            self.add_pointcloud(pointcloud)
 
         if constraints:
             self._push_constraints(constraints)
@@ -136,6 +123,28 @@ class MotionPlanner:
     @property
     def num_dof(self) -> int:
         return self._ndof
+
+    @property
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        """``(lower, upper)`` joint limits of the active DOF."""
+        return (
+            np.asarray(self._planner.lower_bounds()),
+            np.asarray(self._planner.upper_bounds()),
+        )
+
+    @property
+    def joint_limits(self) -> dict[str, tuple[float, float]]:
+        """``{joint name: (lower, upper)}`` the planner samples in, for every
+        joint of the full body.  :attr:`bounds` gives the active joints'
+        ranges as arrays.
+        """
+        from wheelchair_planning.wheelchair import wheelchair_robot_config
+
+        lower, upper = self._planner.joint_limits()
+        return {
+            name: (float(lo), float(hi))
+            for name, lo, hi in zip(wheelchair_robot_config.joint_names, lower, upper)
+        }
 
     @property
     def joint_names(self) -> list[str]:
@@ -156,6 +165,43 @@ class MotionPlanner:
     def base_config(self) -> np.ndarray:
         """The 10-DOF stance frozen for joints outside this subgroup."""
         return self._base_config.copy()
+
+    # ── Joint limits ──────────────────────────────────────────────────
+
+    def set_joint_limits(
+        self, limits: Mapping[str, tuple[float, float]] | None = None
+    ) -> None:
+        """Set the joint ranges the planner samples in, by joint name.
+
+        Joints left out of ``limits`` take the range compiled into the
+        robot model, so ``None`` restores every compiled range.  The
+        ranges cover the full body and are kept across
+        :meth:`set_subgroup`.  Collision checking does not read them.
+
+        Args:
+            limits: ``{joint name: (lower, upper)}`` in metres for the
+                virtual base joints and radians otherwise — e.g. narrow
+                ``Joint_Virtual_X`` / ``Joint_Virtual_Y`` around the task's
+                workspace (the model's base spans ±10 m).
+
+        Raises:
+            ValueError: For an unknown joint name, or bounds that are not
+                finite with ``lower < upper``.  The ranges in effect are
+                then left unchanged.
+        """
+        from wheelchair_planning._ompl_vamp import OmplVampPlanner
+        from wheelchair_planning.wheelchair import wheelchair_robot_config
+
+        names = wheelchair_robot_config.joint_names
+        lower, upper = OmplVampPlanner.default_joint_limits()
+        for name, (lo, hi) in (limits or {}).items():
+            if name not in names:
+                raise ValueError(
+                    f"Unknown joint {name!r}; the joints are {', '.join(names)}"
+                )
+            index = names.index(name)
+            lower[index], upper[index] = lo, hi
+        self._planner.set_joint_limits(lower, upper)
 
     # ── Constraint integration ────────────────────────────────────────
 
@@ -335,20 +381,6 @@ class MotionPlanner:
 
     # ── Subgroup switching ───────────────────────────────────────────
 
-    def set_base_bounds(
-        self, x_lo: float, x_hi: float, y_lo: float, y_hi: float
-    ) -> None:
-        """Bound the planar base's x / y (metres), replacing the URDF's
-        +-10 m virtual-joint limits.
-
-        Applies to every planner and persists across :meth:`set_subgroup`.
-        :meth:`plan_kinodynamic` samples base positions uniformly inside
-        these bounds, so keep them close to the task's workspace.
-        """
-        self._planner.set_base_bounds(
-            float(x_lo), float(x_hi), float(y_lo), float(y_hi)
-        )
-
     def set_subgroup(
         self,
         robot_name: str,
@@ -356,7 +388,7 @@ class MotionPlanner:
     ) -> None:
         """Switch active joints without rebuilding the collision environment.
 
-        Clears all constraints.  The pointcloud is preserved.
+        Clears all constraints and costs.  The pointcloud is preserved.
 
         Args:
             robot_name: Subgroup name from ``PLANNING_SUBGROUPS``, or
@@ -369,6 +401,10 @@ class MotionPlanner:
             wheelchair_robot_config,
         )
 
+        if robot_name not in available_robots():
+            raise ValueError(
+                f"Unknown robot name '{robot_name}'. Use one of: {available_robots()}"
+            )
         if base_config is not None:
             self._base_config = np.asarray(base_config, dtype=np.float64).copy()
         self._robot_name = robot_name
@@ -466,21 +502,9 @@ class MotionPlanner:
             raise ValueError(f"goal has {len(goal)} DOF, expected {self._ndof}")
 
         if not self._planner.validate(start.tolist()):
-            return PlanningResult(
-                status=PlanningStatus.INVALID_START,
-                path=None,
-                planning_time_ns=0,
-                iterations=0,
-                path_cost=float("inf"),
-            )
+            return PlanningResult(PlanningStatus.INVALID_START, None, 0, float("inf"))
         if not self._planner.validate(goal.tolist()):
-            return PlanningResult(
-                status=PlanningStatus.INVALID_GOAL,
-                path=None,
-                planning_time_ns=0,
-                iterations=0,
-                path_cost=float("inf"),
-            )
+            return PlanningResult(PlanningStatus.INVALID_GOAL, None, 0, float("inf"))
 
         if time_limit is None:
             time_limit = self._config.time_limit
@@ -492,27 +516,18 @@ class MotionPlanner:
             time_limit,
             self._config.simplify,
             self._config.interpolate,
-            self._config.interpolate_count,
             self._config.resolution,
         )
 
         if not result.solved:
             return PlanningResult(
-                status=PlanningStatus.FAILED,
-                path=None,
-                planning_time_ns=result.planning_time_ns,
-                iterations=0,
-                path_cost=float("inf"),
+                PlanningStatus.FAILED, None, result.planning_time_ns, float("inf")
             )
-
-        path_np = np.array(result.path, dtype=np.float64)
-
         return PlanningResult(
-            status=PlanningStatus.SUCCESS,
-            path=path_np,
-            planning_time_ns=result.planning_time_ns,
-            iterations=0,
-            path_cost=result.path_cost,
+            PlanningStatus.SUCCESS,
+            np.array(result.path, dtype=np.float64),
+            result.planning_time_ns,
+            result.path_cost,
         )
 
     def plan_kinodynamic(
@@ -536,8 +551,9 @@ class MotionPlanner:
         with feed-forward + PID; see
         :meth:`~wheelchair_planning.trajectory.KinodynamicTrajectory.base_twist`.
 
-        Base positions are sampled inside the planner's base bounds, so
-        call :meth:`set_base_bounds` around the task's workspace first.
+        Base positions are sampled inside the planner's joint limits, so
+        narrow ``Joint_Virtual_X`` / ``Joint_Virtual_Y`` around the task's
+        workspace with :meth:`set_joint_limits` first.
         Collision constraints and soft costs registered on this planner
         are not used by the kinodynamic planner.
 
@@ -739,14 +755,19 @@ class MotionPlanner:
         valid = self._planner.validate_batch(configurations.tolist())
         return np.asarray(valid, dtype=bool)
 
-    def sample_valid(self) -> np.ndarray:
-        """Sample a random collision-free configuration."""
-        lo = np.array(self._planner.lower_bounds())
-        hi = np.array(self._planner.upper_bounds())
-        while True:
-            config = np.random.uniform(lo, hi)
-            if self._planner.validate(config.tolist()):
-                return config
+    def sample_valid(self, max_samples: int = 100_000) -> np.ndarray:
+        """Sample a random collision-free configuration.
+
+        Raises:
+            RuntimeError: If none of ``max_samples`` uniform samples is valid.
+        """
+        lo, hi = self.bounds
+        for _ in range(0, max_samples, 256):
+            batch = np.random.uniform(lo, hi, (256, self._ndof))
+            valid = np.flatnonzero(self.validate_batch(batch))
+            if valid.size:
+                return batch[valid[0]]
+        raise RuntimeError(f"no valid configuration in {max_samples} samples")
 
 
 def available_robots() -> list[str]:

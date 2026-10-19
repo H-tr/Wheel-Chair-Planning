@@ -12,6 +12,7 @@
  * ``add_pointcloud`` / ``add_sphere`` / ``clear_environment`` build
  * the obstacle environment, ``plan(start, goal, ...)`` runs OMPL,
  * ``plan_kinodynamic(...)`` runs the FLASK kinodynamic planner,
+ * ``set_joint_limits(...)`` overrides the joint ranges it samples, and
  * ``validate(...)``, ``dimension()``, ``lower_bounds()``,
  * ``upper_bounds()`` and ``min_max_radii()`` round out the surface.
  */
@@ -62,7 +63,6 @@
 #include <ompl/geometric/planners/rrt/RRTXstatic.h>
 #include <ompl/geometric/planners/rrt/RRTsharp.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
-#include <ompl/geometric/planners/rrt/STRRTstar.h>
 #include <ompl/geometric/planners/rrt/TRRT.h>
 // OMPL — exploration-based
 #include <ompl/geometric/planners/est/BiEST.h>
@@ -79,7 +79,6 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -95,6 +94,9 @@ namespace og = ompl::geometric;
 /// The planar base's virtual joints (x, y, theta) lead the configuration.
 inline constexpr int kBaseDim = 3;
 
+/// (lower, upper) limits of every joint in full-body order.
+using JointLimits = std::pair<std::vector<double>, std::vector<double>>;
+
 struct PlanResult {
   bool solved;
   std::vector<std::vector<double>> path;
@@ -105,20 +107,18 @@ struct PlanResult {
 class OmplVampPlanner {
  public:
   /// Full-body constructor (10 DOF).
-  OmplVampPlanner() : active_dim_(Robot::dimension), is_subgroup_(false) {
+  OmplVampPlanner()
+      : active_dim_(Robot::dimension),
+        is_subgroup_(false),
+        joint_limits_(default_joint_limits()) {
     rebuild_space_();
   }
 
   /// Subgroup constructor (reduced DOF).
   OmplVampPlanner(std::vector<int> active_indices,
                   std::vector<double> frozen_config)
-      : active_dim_(active_indices.size()),
-        is_subgroup_(true),
-        active_indices_(std::move(active_indices)) {
-    frozen_config_.resize(frozen_config.size());
-    for (std::size_t i = 0; i < frozen_config.size(); ++i)
-      frozen_config_[i] = static_cast<float>(frozen_config[i]);
-    rebuild_space_();
+      : OmplVampPlanner() {
+    set_subgroup(std::move(active_indices), std::move(frozen_config));
   }
 
   /// Set the scene pointcloud.  The planner holds at most one cloud;
@@ -217,13 +217,7 @@ class OmplVampPlanner {
 
   auto plan(std::vector<double> start, std::vector<double> goal,
             const std::string& planner_name, double time_limit, bool simplify,
-            bool interpolate, int interpolate_count, double resolution)
-      -> PlanResult {
-    if (interpolate_count > 0 && resolution > 0.0) {
-      throw std::invalid_argument(
-          "plan: pass at most one of interpolate_count (>0) or resolution "
-          "(>0), not both.");
-    }
+            bool interpolate, double resolution) -> PlanResult {
     if (resolution < 0.0) {
       throw std::invalid_argument(
           "plan: resolution must be >= 0 (0 disables).");
@@ -269,25 +263,19 @@ class OmplVampPlanner {
 
     PlanResult result;
     result.planning_time_ns = elapsed_ns;
-    result.solved = static_cast<bool>(status);
+    // OMPL also reports approximate solutions, which stop short of the goal.
+    result.solved = status == ob::PlannerStatus::EXACT_SOLUTION;
 
     if (result.solved) {
       if (simplify) ss.simplifySolution();
 
       auto& path = ss.getSolutionPath();
       // Interpolate after simplify so the returned path has enough
-      // waypoints to animate smoothly.  Three modes:
-      //   - interpolate_count > 0 : fixed total waypoint count,
-      //       distributed by OMPL across edges by relative length.
-      //   - resolution > 0        : waypoints per unit state-space
-      //       distance — each edge of length d is split into
-      //       ceil(d * resolution) equal segments.
-      //   - both 0                : OMPL default (longest valid
-      //       segment fraction of the state space).
+      // waypoints to animate smoothly: each edge of length d is split
+      // into ceil(d * resolution) equal segments, or with resolution 0
+      // OMPL's default longest-valid-segment fraction is used.
       if (interpolate) {
-        if (interpolate_count > 0) {
-          path.interpolate(static_cast<unsigned int>(interpolate_count));
-        } else if (resolution > 0.0) {
+        if (resolution > 0.0) {
           densify_by_resolution(path, active_space, resolution);
         } else {
           path.interpolate();
@@ -624,23 +612,76 @@ class OmplVampPlanner {
     return {Robot::min_radius, Robot::max_radius};
   }
 
-  /// Bound the planar base's x / y (metres) for every planner, replacing
-  /// the URDF's +-10 m virtual-joint limits.  Persists across
-  /// ``set_subgroup`` / ``set_full_body``.  The kinodynamic planner
-  /// samples base positions uniformly inside these bounds, so keep them
-  /// close to the task's workspace.
-  void set_base_bounds(double x_lo, double x_hi, double y_lo, double y_hi) {
-    if (!(x_lo < x_hi) || !(y_lo < y_hi)) {
-      throw std::invalid_argument(
-          "set_base_bounds: need x_lo < x_hi and y_lo < y_hi.");
+  // ── Joint limits ──────────────────────────────────────────────────
+  //
+  // The planner keeps one (lower, upper) pair per joint of the full
+  // body.  Every active state space — full body or subgroup — takes
+  // its bounds from it, so limits set here survive set_subgroup() and
+  // set_full_body().  They only shape where OMPL samples and which
+  // states it accepts; collision checking never reads them.
+
+  /// The limits compiled into the robot model, in full-body order.
+  static auto default_joint_limits() -> JointLimits {
+    Robot::Configuration lo, hi;
+    alignas(Robot::Configuration::S::Alignment)
+        std::array<float, Robot::Configuration::num_scalars_rounded>
+            zeros{}, ones{};
+    ones.fill(1.0f);
+    lo = Robot::Configuration(zeros.data());
+    hi = Robot::Configuration(ones.data());
+    Robot::scale_configuration(lo);
+    Robot::scale_configuration(hi);
+    const auto lo_arr = lo.to_array();
+    const auto hi_arr = hi.to_array();
+    JointLimits limits{std::vector<double>(Robot::dimension),
+                       std::vector<double>(Robot::dimension)};
+    for (std::size_t i = 0; i < Robot::dimension; ++i) {
+      limits.first[i] = std::min(lo_arr[i], hi_arr[i]);
+      limits.second[i] = std::max(lo_arr[i], hi_arr[i]);
     }
-    base_bounds_ = std::array<double, 4>{x_lo, x_hi, y_lo, y_hi};
+    return limits;
+  }
+
+  /// The limits in effect, in full-body order.
+  auto joint_limits() const -> JointLimits { return joint_limits_; }
+
+  /// Replace the limits of every joint (full-body order).  Each joint
+  /// needs finite bounds with lower < upper; on error nothing changes.
+  void set_joint_limits(const std::vector<double>& lower,
+                        const std::vector<double>& upper) {
+    if (lower.size() != Robot::dimension || upper.size() != Robot::dimension)
+      throw std::invalid_argument("set_joint_limits: lower and upper need " +
+                                  std::to_string(Robot::dimension) +
+                                  " entries, got " +
+                                  std::to_string(lower.size()) + " and " +
+                                  std::to_string(upper.size()) + ".");
+    for (std::size_t i = 0; i < lower.size(); ++i) {
+      if (!std::isfinite(lower[i]) || !std::isfinite(upper[i]) ||
+          !(lower[i] < upper[i]))
+        throw std::invalid_argument(
+            "set_joint_limits: joint " + std::to_string(i) +
+            " needs finite bounds with lower < upper, got [" +
+            std::to_string(lower[i]) + ", " + std::to_string(upper[i]) + "].");
+    }
+    joint_limits_ = {lower, upper};
     rebuild_space_();
   }
 
   /// Switch to a different subgroup without rebuilding the environment.
   void set_subgroup(std::vector<int> active_indices,
                     std::vector<double> frozen_config) {
+    std::vector<int> sorted = active_indices;
+    std::sort(sorted.begin(), sorted.end());
+    if (frozen_config.size() != Robot::dimension ||
+        std::any_of(active_indices.begin(), active_indices.end(),
+                    [](int i) {
+                      return i < 0 || i >= static_cast<int>(Robot::dimension);
+                    }) ||
+        std::adjacent_find(sorted.begin(), sorted.end()) != sorted.end())
+      throw std::invalid_argument(
+          "set_subgroup: frozen_config needs " +
+          std::to_string(Robot::dimension) +
+          " entries and active_indices must index them, each once.");
     active_dim_ = static_cast<int>(active_indices.size());
     is_subgroup_ = true;
     active_indices_ = std::move(active_indices);
@@ -668,9 +709,7 @@ class OmplVampPlanner {
   bool is_subgroup_;
   std::vector<int> active_indices_;
   std::vector<float> frozen_config_;
-  // User override of the planar base's (x_lo, x_hi, y_lo, y_hi), applied
-  // on top of the URDF limits whenever the state space is rebuilt.
-  std::optional<std::array<double, 4>> base_bounds_;
+  JointLimits joint_limits_;
   ob::StateSpacePtr space_;
   FloatEnv float_env_;
   VampEnv env_;
@@ -723,41 +762,15 @@ class OmplVampPlanner {
     return multi;
   }
 
+  // Rebuild the active state space with the stored joint limits of the
+  // active joints.
   void rebuild_space_() {
-    Robot::Configuration lo, hi;
-    alignas(Robot::Configuration::S::Alignment)
-        std::array<float, Robot::Configuration::num_scalars_rounded>
-            zeros{}, ones{};
-    ones.fill(1.0f);
-    lo = Robot::Configuration(zeros.data());
-    hi = Robot::Configuration(ones.data());
-    Robot::scale_configuration(lo);
-    Robot::scale_configuration(hi);
-    auto lo_arr = lo.to_array();
-    auto hi_arr = hi.to_array();
-
     auto space = std::make_shared<ob::RealVectorStateSpace>(active_dim_);
     ob::RealVectorBounds bounds(active_dim_);
-    if (is_subgroup_) {
-      for (std::size_t i = 0; i < active_indices_.size(); ++i) {
-        auto idx = active_indices_[i];
-        bounds.setLow(i, std::min(lo_arr[idx], hi_arr[idx]));
-        bounds.setHigh(i, std::max(lo_arr[idx], hi_arr[idx]));
-      }
-    } else {
-      for (int i = 0; i < active_dim_; ++i) {
-        bounds.setLow(i, std::min(lo_arr[i], hi_arr[i]));
-        bounds.setHigh(i, std::max(lo_arr[i], hi_arr[i]));
-      }
-    }
-    if (base_bounds_) {
-      for (int i = 0; i < active_dim_; ++i) {
-        const int joint = is_subgroup_ ? active_indices_[i] : i;
-        if (joint == 0 || joint == 1) {
-          bounds.setLow(i, (*base_bounds_)[2 * joint]);
-          bounds.setHigh(i, (*base_bounds_)[2 * joint + 1]);
-        }
-      }
+    for (int i = 0; i < active_dim_; ++i) {
+      const int joint = is_subgroup_ ? active_indices_[i] : i;
+      bounds.setLow(i, joint_limits_.first[joint]);
+      bounds.setHigh(i, joint_limits_.second[joint]);
     }
     space->setBounds(bounds);
     space_ = space;
@@ -905,9 +918,8 @@ class OmplVampPlanner {
   // / informed-tree variants don't go through manifold projection.
   static void reject_incompatible_planner(const std::string& name) {
     static const std::vector<std::string> bad = {
-        "bitstar",  "abitstar",   "aitstar",  "eitstar",
-        "blitstar", "fmt",        "bfmt",     "informed_rrtstar",
-        "rrtsharp", "rrtxstatic", "strrtstar"};
+        "bitstar", "abitstar", "aitstar",          "eitstar",  "blitstar",
+        "fmt",     "bfmt",     "informed_rrtstar", "rrtsharp", "rrtxstatic"};
     for (const auto& b : bad) {
       if (name == b) {
         throw std::invalid_argument(
@@ -930,7 +942,6 @@ class OmplVampPlanner {
       return std::make_shared<og::InformedRRTstar>(si);
     if (name == "rrtsharp") return std::make_shared<og::RRTsharp>(si);
     if (name == "rrtxstatic") return std::make_shared<og::RRTXstatic>(si);
-    if (name == "strrtstar") return std::make_shared<og::STRRTstar>(si);
     if (name == "lbtrrt") return std::make_shared<og::LBTRRT>(si);
     if (name == "trrt") return std::make_shared<og::TRRT>(si);
     if (name == "bitrrt") return std::make_shared<og::BiTRRT>(si);

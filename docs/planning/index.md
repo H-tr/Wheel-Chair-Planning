@@ -7,7 +7,7 @@
     ---
 
     All of [OMPL](https://ompl.kavrakilab.org/)'s mature sampling-based
-    planners (26 exposed), driven by one uniform Python call. No glue
+    planners (30 exposed), driven by one uniform Python call. No glue
     code to swap planners — change a string.
 
 -   __VAMP backend__
@@ -16,7 +16,7 @@
 
     Collision checking runs through [VAMP](https://github.com/KavrakiLab/vamp)'s
     SIMD-vectorised sphere pipeline. Point-cloud obstacles are
-    broadphase-indexed and checked in **~3 μs per config**.
+    broadphase-indexed.
 
 -   __C++ hot path__
 
@@ -65,58 +65,65 @@ accepts any of:
 
     | Family | Planners |
     |---|---|
-    | RRT | `rrtc`, `rrt`, `trrt`, `bitrrt`, `strrtstar`, `lbtrrt` |
+    | RRT | `rrtc`, `rrt`, `trrt`, `bitrrt` |
     | KPIECE | `kpiece`, `bkpiece`, `lbkpiece` |
-    | PRM | `prm`, `lazyprm`, `spars`, `spars2` |
+    | PRM | `prm`, `lazyprm` |
     | Exploration | `est`, `biest`, `sbl`, `stride`, `pdst` |
-    | RRT\*-feasible | `rrtsharp`, `rrtxstatic` |
 
 === "Asymptotically optimal (keep refining until budget)"
 
     | Family | Planners |
     |---|---|
-    | RRT\* | `rrtstar`, `informed_rrtstar` |
+    | RRT\* | `rrtstar`, `informed_rrtstar`, `rrtsharp`, `rrtxstatic` |
     | Informed trees | `bitstar`, `abitstar`, `aitstar`, `eitstar`, `blitstar` |
     | FMT | `fmt`, `bfmt` |
     | PRM\* | `prmstar`, `lazyprmstar` |
+    | Near-optimal | `lbtrrt`, `spars`, `spars2` |
 
 ## Benchmarks
 
-Median / p95 wall-clock for a single **search** (simplification and
-interpolation disabled), N = 20 runs per cell, plans from the home
-pose to a sampled collision-free goal around a tabletop point-cloud
-obstacle (same scene as `examples/planning/motion.py`).
+Median / p95 planning time of a single **search** (simplification and
+interpolation disabled), N = 20 runs per cell, from the home pose to a
+sampled collision-free goal around the table point cloud of
+`examples/planning/motion.py`. Only exact solutions count; every
+feasibility run found one.
 
 ### Feasibility planners — time to first solution
 
-| Planner | Left arm (7 DOF) | Dual arm (14 DOF) | Full body (10 DOF) |
+| Planner | Arm (7 DOF) | Base (3 DOF) | Whole body (10 DOF) |
 |---|---:|---:|---:|
-| `rrtc` | 1.1 / 1.1 ms | 1.1 / 1.2 ms | 1.1 / 1.1 ms |
-| `rrt` | 2.2 / 3.3 ms | 3.2 / 5.3 ms | 2.2 / 10.6 ms |
-| `kpiece` | 1.1 / 2.3 ms | 1.7 / 3.2 ms | 1.1 / 4.3 ms |
-| `bkpiece` | 2.2 / 3.3 ms | 8.5 / 19.2 ms | 34.8 / 71.7 ms |
-| `lbkpiece` | 2.1 / 2.2 ms | 8.5 / 15.9 ms | 113.4 / 164.5 ms |
-| `prm` | 1.1 / 3.2 ms | 1.1 / 3.2 ms | 2.2 / 4.2 ms |
-| `lazyprm` | 1.1 / 1.2 ms | 3.7 / 79.1 ms | 3.2 / 12.7 ms |
-| `est` | 1.1 / 4.3 ms | 2.1 / 5.3 ms | 2.2 / 6.4 ms |
-| `biest` | 1.1 / 2.2 ms | 3.3 / 6.4 ms | 2.2 / 4.3 ms |
-| `sbl` | 1.1 / 1.1 ms | 2.2 / 3.3 ms | 8.5 / 17.0 ms |
-| `stride` | 2.2 / 3.2 ms | 2.7 / 8.5 ms | 2.2 / 3.3 ms |
+| `rrtc` | 2.78 / 4.28 ms | 1.16 / 1.30 ms | 1.17 / 2.28 ms |
+| `rrt` | 6.00 / 423.95 ms | 3.30 / 6.62 ms | 11.71 / 71.21 ms |
+| `kpiece` | 22.29 / 165.93 ms | 3.32 / 8.52 ms | 30.46 / 77.76 ms |
+| `bkpiece` | 29.87 / 40.40 ms | 6.48 / 9.66 ms | 103.25 / 173.67 ms |
+| `lbkpiece` | 48.01 / 99.57 ms | 4.42 / 6.59 ms | 235.99 / 341.09 ms |
+| `prm` | 20.65 / 59.59 ms | 66.19 / 224.49 ms | 14.94 / 329.68 ms |
+| `lazyprm` | 7.09 / 14.90 ms | 1.16 / 1.28 ms | 5.96 / 17.00 ms |
+| `est` | 6.57 / 21.22 ms | 2.73 / 8.53 ms | 6.96 / 73.56 ms |
+| `biest` | 4.91 / 7.73 ms | 1.70 / 4.43 ms | 4.90 / 10.70 ms |
+| `sbl` | 9.13 / 13.90 ms | 2.21 / 3.34 ms | 17.07 / 36.31 ms |
+| `stride` | 41.96 / 175.51 ms | 3.28 / 14.87 ms | 26.61 / 73.45 ms |
+
+The KPIECE family, STRIDE and PDST use the motion check that reports
+the last valid state of a failed motion, which checks a failed motion
+one sample at a time.
 
 ### Asymptotically-optimal planners — median path cost after a 1.0 s budget
 
-| Planner | Left arm | Dual arm | Full body |
+| Planner | Arm | Base | Whole body |
 |---|---:|---:|---:|
-| `rrtstar` | 4.18 | 9.16 | 15.54 |
-| `bitstar` | 4.05 | 5.21 | 16.65 |
-| `aitstar` | 4.20 | 6.43 | 17.10 |
-| `eitstar` | 4.11 | 6.01 | 14.59 |
-| `fmt` | 4.55 | 6.21 | 14.35 |
+| `rrtstar` | 9.94 (19/20 solved) | 7.04 | 18.05 |
+| `bitstar` | 9.63 (19/20 solved) | 8.48 | 17.30 |
+| `aitstar` | 11.45 | 9.63 | 19.87 |
+| `eitstar` | 9.77 | 6.72 | 16.49 |
+| `fmt` | 9.63 | 8.68 | 15.48 |
 
-!!! note "Environment"
-    13th Gen Intel Core i9-13900KF, 24 logical cores · Linux 6.8 ·
-    Python 3.12.13. Reproduce with
-    `pixi run -e dev python scripts/benchmarks/motion_planning.py`.
+!!! note "Measurement"
+    `pixi run -e dev python scripts/benchmarks/motion_planning.py`, commit
+    `1f2ac01`, 2026-10-19, AMD EPYC 7543 (128 logical CPUs, shared with
+    other jobs, load 8–11) · Linux 6.8 · Python 3.14.7. p95 is the
+    script's nearest-rank value. Raw output:
+    `/nas/pollux/tianrun/wheelchair_flask/geo_benchmark.txt`.
 
 ## Minimal example
 
@@ -175,24 +182,30 @@ PlannerConfig(
     # constraints and costs.
     simplify=True,
 
-    # Resample the (simplified) path densely.  Pick one knob:
-    #
-    #   interpolate_count > 0   → exactly this many total waypoints,
-    #                             distributed proportionally to edge length
-    #   resolution > 0.0        → ceil(edge_length * resolution) samples
-    #                             per edge — cleanest "uniform density"
-    #                             option, scales naturally with DOF
-    #   both 0                  → OMPL's default longest-valid-segment
-    #                             fraction, usually too sparse for control
-    #
-    # The default (resolution=64.0) gives ~64 waypoints per unit of
+    # Resample the (simplified) path densely: each edge of length d
+    # gets ceil(d * resolution) segments; resolution=0.0 falls back to
+    # OMPL's default longest-valid-segment fraction, usually too sparse
+    # for control.  The default (64.0) gives ~64 waypoints per unit of
     # state-space distance, which is smooth enough for a 100 Hz control
     # loop and robust to low-frequency replanning.
     interpolate=True,
     resolution=64.0,
-    interpolate_count=0,
+
+    # Joint-range overrides by joint name, (lower, upper) in metres for
+    # the virtual base joints and radians otherwise.  Joints left out
+    # keep the range compiled into the robot model (the base spans
+    # ±10 m); the planner samples only inside these ranges.
+    joint_limits={"Joint_Virtual_X": (-2.0, 3.0), "Joint_Virtual_Y": (-1.5, 1.5)},
 )
 ```
+
+`planner.set_joint_limits(limits)` changes the ranges of an existing
+planner with the same semantics: joints left out take the compiled
+range (`None` restores every one), an unknown name or a range that is
+not finite with `lower < upper` raises `ValueError`, and the ranges are
+kept across `set_subgroup`. `planner.bounds` gives the active joints'
+ranges as `(lower, upper)` arrays and `planner.joint_limits` every
+joint's range by name.
 
 Typical recipes:
 
@@ -229,18 +242,6 @@ Typical recipes:
     )
     ```
 
-=== "Fixed waypoint count (e.g. 100 steps)"
-
-    ```python
-    PlannerConfig(
-        planner_name="rrtc",
-        time_limit=1.0,
-        interpolate=True,
-        interpolate_count=100,        # exactly 100 waypoints — mutually exclusive with resolution
-        resolution=0.0,
-    )
-    ```
-
 ## Post-hoc simplify / interpolate
 
 `simplify` and `interpolate` run inside `plan(...)` by default, but
@@ -259,9 +260,13 @@ the same pipeline is exposed as standalone methods on `MotionPlanner`
   shortcutting is known-safe.
 
 ```python
+planner = create_planner(
+    "wheelchair_arm",
+    config=PlannerConfig(simplify=False, interpolate=False),
+)
 result = planner.plan(start, goal)                     # unsimplified, raw
 smooth = planner.simplify_path(result.path, time_limit=1.0)
-dense  = planner.interpolate_path(smooth, resolution=128.0)     # or count=200
+dense  = planner.interpolate_path(smooth, resolution=128.0)     # or count=200, resolution=0.0
 ```
 
 Both methods reuse the planner's collision environment and
@@ -290,14 +295,8 @@ interpolated samples along an edge, fed independent configs per lane
 instead. Per-config result is preserved: when a packed block fails,
 only that block falls back to per-lane checks.
 
-| Workload (4096 configs, AVX) | `validate` loop | `validate_batch` | Speedup |
-|---|---:|---:|---:|
-| All valid (best case) | 15.1 ms | 1.8 ms | **~8.5×** |
-| 72% valid, mixed | 15.4 ms | 9.2 ms | ~1.7× |
-
-Best case saturates the rake-8 SIMD width. Mixed-validity pays the
-fallback for blocks with any invalid lane; the common "which of these
-random samples is valid?" workload still wins.
+A block of valid configurations costs one SIMD sweep; a block with an
+invalid lane pays the per-lane fallback.
 
 ```python
 # Example: filter 1000 candidate goals by validity.
@@ -314,9 +313,8 @@ good_goals = goals[mask]
 
     ---
 
-    Plan over a slice of the 10-DOF body — single arm, dual arm,
-    torso + arm, base, height chain, whole body — with the remaining
-    joints pinned to any 10-DOF stance.
+    Plan over a slice of the 10-DOF body — the arm, the base, or the
+    whole body — with the remaining joints pinned to any 10-DOF stance.
 
 -   [__Manifold planning__](manifold.md)
 

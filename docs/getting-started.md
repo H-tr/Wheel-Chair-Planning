@@ -3,11 +3,11 @@
 ## Prerequisites
 
 - **Linux** x86_64 with AVX2 (Haswell / 2013 or newer)
-- **Python** 3.12–3.14
+- **Python** 3.12–3.15
 
 ## Installation
 
-Pre-built wheels are available for Python 3.12–3.14 on Linux x86_64. No
+Pre-built wheels are available for Python 3.12–3.15 on Linux x86_64. No
 local compilation required:
 
 ```bash

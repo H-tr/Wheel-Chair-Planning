@@ -6,7 +6,7 @@
  * Flatness", T-RO 2026), specialised to a mobile manipulator whose
  * leading active DOF may be a nonholonomic diff-drive base:
  *
- *   * Flat output ``y``: every arm / torso joint is its own flat output
+ *   * Flat output ``y``: every arm joint is its own flat output
  *     (fully actuated), and the base contributes its planar position
  *     (x, y).  The base heading is not a flat output — it is recovered
  *     from the direction of travel, ``theta = atan2(y_dot, x_dot) +

@@ -105,7 +105,8 @@ def test_planned_path_satisfies_constraint():
         SUBGROUP,
         config=PlannerConfig(
             planner_name="rrtc",
-            time_limit=5.0,
+            # Exact solves take 0.1-15 s (9% beyond 5 s in 100 runs).
+            time_limit=60.0,
             simplify=False,
             interpolate=True,
         ),
@@ -151,7 +152,8 @@ def test_planned_path_endpoints_match_request():
     ctx, start, constraint = _build_horizontal_line_constraint()
     planner = create_planner(
         SUBGROUP,
-        config=PlannerConfig(planner_name="rrtc", time_limit=3.0, simplify=False),
+        # Exact solves take 0.1-11 s (27% beyond 3 s in 100 runs).
+        config=PlannerConfig(planner_name="rrtc", time_limit=60.0, simplify=False),
         constraints=[constraint],
     )
 

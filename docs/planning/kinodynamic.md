@@ -14,7 +14,7 @@ from wheelchair_planning.planning import create_planner
 from wheelchair_planning.types import KinodynamicConfig
 
 planner = create_planner("wheelchair_whole_body", pointcloud=cloud)
-planner.set_base_bounds(-2.0, 3.0, -1.5, 1.5)   # sample the base near the task
+planner.set_joint_limits({"Joint_Virtual_X": (-2.0, 3.0), "Joint_Virtual_Y": (-1.5, 1.5)})
 result = planner.plan_kinodynamic(start, goal, config=KinodynamicConfig(time_limit=1.0))
 
 traj = result.trajectory                      # KinodynamicTrajectory
@@ -38,11 +38,11 @@ forward only and turns in place where needed, so it always moves the way
 its user faces (`BASE_REVERSE_ENABLE = False`; pass
 `KinodynamicConfig(allow_reverse=True)` to permit reversing).
 
-Base positions are sampled uniformly inside the planner's base bounds,
-which default to the URDF's ±10 m virtual-joint limits. Call
-`set_base_bounds(x_lo, x_hi, y_lo, y_hi)` around the task's workspace;
-the bounds persist across `set_subgroup` and also apply to the geometric
-planners.
+Base positions are sampled uniformly inside the planner's joint limits,
+which default to the URDF's ±10 m virtual-joint limits. Narrow
+`Joint_Virtual_X` / `Joint_Virtual_Y` around the task's workspace with
+`set_joint_limits` (or `PlannerConfig(joint_limits=...)`); the limits
+persist across `set_subgroup` and also apply to the geometric planners.
 
 ## How it works
 

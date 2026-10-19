@@ -16,7 +16,11 @@ class PlanResult:
 
     @property
     def solved(self) -> bool:
-        """``True`` if OMPL returned a solution within the time limit."""
+        """``True`` if OMPL found an exact solution within the time limit.
+
+        Approximate solutions, which stop short of the goal, count as
+        unsolved.
+        """
         ...
 
     @property
@@ -46,8 +50,9 @@ class KinodynamicSettings:
     """Parameters of ``OmplVampPlanner.plan_kinodynamic`` (FLASK).
 
     See ``ext/ompl_vamp/plan_kinodynamic.hpp`` for field semantics;
-    :class:`wheelchair_planning.types.KinodynamicConfig` fills them from
-    the robot limits in :mod:`wheelchair_planning.wheelchair`.
+    :meth:`wheelchair_planning.planning.MotionPlanner.plan_kinodynamic`
+    fills them from a :class:`wheelchair_planning.types.KinodynamicConfig`
+    and the robot limits in :mod:`wheelchair_planning.wheelchair`.
     """
 
     max_velocity: list[float]
@@ -176,6 +181,10 @@ class OmplVampPlanner:
                 planner will plan over, in DOF order.
             frozen_config: 10-DOF stance to inject for every joint *not*
                 in ``active_indices``.
+
+        Raises:
+            ValueError: If ``frozen_config`` does not have 10 entries, an
+                index is outside ``[0, 10)`` or an index repeats.
         """
         ...
 
@@ -265,7 +274,7 @@ class OmplVampPlanner:
             symbol_name: CasADi function symbol name inside the library.
             ambient_dim: Dimension of the joint space (must match
                 :meth:`dimension`).
-            weight: Positive scalar multiplier applied to the cost.
+            weight: Non-negative scalar multiplier applied to the cost.
         """
         ...
 
@@ -285,7 +294,6 @@ class OmplVampPlanner:
         time_limit: float = 10.0,
         simplify: bool = True,
         interpolate: bool = True,
-        interpolate_count: int = 0,
         resolution: float = 64.0,
     ) -> PlanResult:
         """Plan a collision-free path from ``start`` to ``goal``.
@@ -298,20 +306,13 @@ class OmplVampPlanner:
             time_limit: Solver time limit in seconds.
             simplify: If true, run ``SimpleSetup::simplifySolution`` on the
                 returned path.
-            interpolate: If true, densify the simplified path.  Density
-                is picked by ``interpolate_count`` when it is ``> 0``,
-                otherwise by ``resolution`` when it is ``> 0``, otherwise
-                by OMPL's default longest-valid-segment fraction.
-            interpolate_count: Target total waypoint count for the whole
-                path.  OMPL distributes states across edges proportionally
-                to their length.  ``0`` disables this knob.  Cannot be
-                combined with ``resolution``.
+            interpolate: If true, densify the simplified path by
+                ``resolution``.
             resolution: Waypoints per unit of state-space distance.  Each
                 edge of length ``d`` is split into ``ceil(d * resolution)``
                 equal segments, so higher values give denser paths.
                 Default ``64.0``.  Set to ``0.0`` to fall back to OMPL's
-                default interpolator.  Cannot be combined with
-                ``interpolate_count``.
+                default interpolator.
         """
         ...
 
@@ -427,11 +428,49 @@ class OmplVampPlanner:
         """
         ...
 
-    def set_base_bounds(
-        self, x_lo: float, x_hi: float, y_lo: float, y_hi: float
-    ) -> None:
-        """Bound the planar base's x / y (metres); persists across
+    @staticmethod
+    def default_joint_limits() -> tuple[list[float], list[float]]:
+        """The ``(lower, upper)`` limits compiled into the robot model, in
+        full-body order."""
+        ...
+
+    def joint_limits(self) -> tuple[list[float], list[float]]:
+        """The ``(lower, upper)`` limits in effect, in full-body order."""
+        ...
+
+    def set_joint_limits(self, lower: Sequence[float], upper: Sequence[float]) -> None:
+        """Replace the limits of every joint (full-body order); each needs
+        finite bounds with ``lower < upper``.  Persists across
         :meth:`set_subgroup` / :meth:`set_full_body`."""
+        ...
+
+    def filter_pointcloud(
+        self,
+        points: Sequence[Sequence[float]],
+        min_dist: float,
+        max_range: float,
+        origin: Sequence[float],
+        workspace_min: Sequence[float],
+        workspace_max: Sequence[float],
+        cull: bool = True,
+    ) -> list[list[float]]:
+        """Spatially downsample ``points`` via Morton-curve sorting.
+
+        Keeps one point per ``min_dist`` neighbourhood and, with
+        ``cull``, drops points farther than ``max_range`` from ``origin``
+        or outside ``[workspace_min, workspace_max]``.
+        """
+        ...
+
+    def filter_self_from_pointcloud(
+        self,
+        points: Sequence[Sequence[float]],
+        point_radius: float,
+        config: Sequence[float],
+    ) -> list[list[float]]:
+        """Drop the points whose sphere of radius ``point_radius`` overlaps
+        a robot collision sphere at ``config`` (active DOF) or an obstacle
+        of the environment."""
         ...
 
     def set_subgroup(
@@ -441,21 +480,25 @@ class OmplVampPlanner:
     ) -> None:
         """Switch to a different subgroup without rebuilding the environment.
 
-        Clears all constraints.  The pointcloud and collision geometry
-        are preserved.
+        Clears all constraints and costs.  The pointcloud and collision
+        geometry are preserved.
 
         Args:
             active_indices: Positions in the full 10-DOF body that this
                 planner will plan over, in DOF order.
             frozen_config: 10-DOF stance to inject for every joint *not*
                 in ``active_indices``.
+
+        Raises:
+            ValueError: If ``frozen_config`` does not have 10 entries, an
+                index is outside ``[0, 10)`` or an index repeats.
         """
         ...
 
     def set_full_body(self) -> None:
         """Switch back to full-body planning (10 DOF).
 
-        Clears all constraints.  The pointcloud and collision geometry
-        are preserved.
+        Clears all constraints and costs.  The pointcloud and collision
+        geometry are preserved.
         """
         ...

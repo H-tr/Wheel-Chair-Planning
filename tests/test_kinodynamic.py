@@ -221,7 +221,9 @@ def wb_planner():
     planner = create_planner(
         "wheelchair_whole_body", config=PlannerConfig(time_limit=1.0)
     )
-    planner.set_base_bounds(-3.0, 3.5, -3.0, 3.0)
+    planner.set_joint_limits(
+        {"Joint_Virtual_X": (-3.0, 3.5), "Joint_Virtual_Y": (-3.0, 3.0)}
+    )
     # A pillar the wheelchair has to steer around (its footrest reaches
     # x = 0.66 m at the start pose).
     planner._planner.add_sphere([1.4, 0.0, 0.3], 0.3)
@@ -250,21 +252,6 @@ def test_whole_body_plan_is_executable(wb_planner, goal):
     cfg = KinodynamicConfig(time_limit=3.0, seed=2)
     result = wb_planner.plan_kinodynamic(start, goal, config=cfg)
     assert_executable(wb_planner, result, start, goal)
-
-
-def test_base_bounds_restrict_the_base_and_persist():
-    planner = create_planner(
-        "wheelchair_whole_body", config=PlannerConfig(time_limit=1.0)
-    )
-    planner.set_base_bounds(-1.0, 2.0, -0.5, 0.5)
-    np.testing.assert_allclose(planner._planner.lower_bounds()[:2], [-1.0, -0.5])
-    np.testing.assert_allclose(planner._planner.upper_bounds()[:2], [2.0, 0.5])
-    planner.set_subgroup("wheelchair_base")
-    np.testing.assert_allclose(planner._planner.lower_bounds()[:2], [-1.0, -0.5])
-    planner.set_subgroup("wheelchair_arm")  # no base DOF: arm bounds untouched
-    assert planner._planner.lower_bounds()[0] < -6.0
-    with pytest.raises(ValueError):
-        planner.set_base_bounds(1.0, -1.0, 0.0, 1.0)
 
 
 def test_whole_body_forward_only(wb_planner):

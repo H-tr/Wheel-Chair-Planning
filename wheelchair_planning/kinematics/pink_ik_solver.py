@@ -63,7 +63,7 @@ class PinkIKSolver(IKSolverBase):
 
     Use via the unified factory::
 
-        solver = create_ik_solver("whole_body", side="left", backend="pink",
+        solver = create_ik_solver("whole_body", backend="pink",
                                   config=PinkIKConfig(com_cost=0.1))
     """
 

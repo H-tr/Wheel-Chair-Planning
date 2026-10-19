@@ -7,10 +7,10 @@ Measures two things on the same table-obstacle scene as
        the raw VAMP SIMD pipeline.  Reported in nanoseconds / check
        and checks / second.
     2. End-to-end plan time for a handful of representative OMPL
-       planners over the left arm (7 DOF), dual arm (14 DOF), and
-       the full body (24 DOF).  Reported as median / p50-p95 wall
-       clock over ``--repeats`` runs, excluding simplification and
-       interpolation so the numbers reflect search only.
+       planners over the arm (7 DOF), the base (3 DOF) and the whole
+       body (10 DOF).  Reported as median / p95 planning time over
+       ``--repeats`` runs, excluding simplification and interpolation
+       so the numbers reflect search only.
 
 The script prints a compact markdown table intended to be lifted
 verbatim into the docs landing page, plus a ``[Environment]`` block
@@ -63,15 +63,15 @@ AO_PLANNERS = ["rrtstar", "bitstar", "aitstar", "eitstar", "fmt"]
 
 # Robot subgroups to benchmark, paired with a sensible time budget.
 SUBGROUPS = [
-    ("wheelchair_left_arm", 1.0),
-    ("wheelchair_dual_arm", 1.0),
-    ("wheelchair", 2.0),  # full body, 24 DOF
+    ("wheelchair_arm", 1.0),
+    ("wheelchair_base", 1.0),
+    ("wheelchair_whole_body", 2.0),
 ]
 
 AO_BUDGET = 1.0  # seconds — cost-refinement budget for AO planners
 
 
-def load_table(distance: float = 0.85, height: float = 0.35) -> np.ndarray:
+def load_table(distance: float = 1.4, height: float = 0.9) -> np.ndarray:
     """Load the bundled table point cloud in front of the robot.
 
     Mirrors ``examples/planning/motion.py::load_table`` so the
@@ -268,7 +268,7 @@ def main() -> None:
     with _silence_fds():
         # --- Collision check microbenchmark (VAMP SIMD pipeline) ---
         warm = create_planner(
-            "wheelchair_left_arm",
+            "wheelchair_arm",
             config=PlannerConfig(planner_name="rrtc", time_limit=0.1),
             base_config=HOME_JOINTS.copy(),
             pointcloud=cloud,

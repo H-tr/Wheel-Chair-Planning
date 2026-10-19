@@ -14,8 +14,8 @@ are respected, and the trajectory is as fast as physically possible.
     ---
 
     Finds the fastest feasible velocity profile along the path.
-    Every joint is at its velocity or acceleration limit at every
-    instant — there is no slack left to speed up.
+    At every instant some joint is at its velocity or acceleration
+    limit — there is no slack left to speed up.
 
 -   __Bounded velocity + acceleration__
 
@@ -67,6 +67,7 @@ import numpy as np
 from wheelchair_planning.planning import create_planner
 from wheelchair_planning.trajectory import TimeOptimalParameterizer
 from wheelchair_planning.types import PlannerConfig
+from wheelchair_planning.wheelchair import HOME_JOINTS
 
 # 1. Plan a collision-free path. Keep interpolation/densification on when
 #    you need the timed spline to stay close to the checked path.
@@ -74,7 +75,7 @@ planner = create_planner(
     "wheelchair_arm",
     config=PlannerConfig(simplify=True, interpolate=True),
 )
-start = planner.extract_config(home_joints)
+start = planner.extract_config(HOME_JOINTS)
 goal  = planner.sample_valid()
 result = planner.plan(start, goal)
 path = result.path                       # (N, 7)
@@ -143,7 +144,7 @@ traj = parameterize_path(path, vel_limits, acc_limits)
 A typical end-to-end pipeline:
 
 ```
-plan(start, goal, simplify=True, interpolate=True)
+plan(start, goal)          with PlannerConfig(simplify=True, interpolate=True)
         │
         ▼
   (N, ndof) path          geometric, no timing

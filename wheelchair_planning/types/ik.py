@@ -104,7 +104,7 @@ class PinkIKConfig:
         posture_cost: Posture regularization weight (toward seed).
         com_cost: Center-of-mass stability weight (0 disables).
             Penalizes CoM drift from the seed configuration to prevent tipping.
-        camera_frame: Frame name to stabilize (e.g. "Link_Camera_Head_Forehead").
+        camera_frame: Frame name to stabilize (e.g. "camera_color_optical_frame").
             When set with camera_cost > 0, adds a FrameTask that anchors this
             frame to its pose at the seed configuration, keeping the camera
             observation stable while the arm moves.
