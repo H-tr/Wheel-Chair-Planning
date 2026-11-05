@@ -13,6 +13,12 @@
     <joint name="joint7" value="0" />
   </group_state>
   <end_effector name="gripper" parent_link="link_tcp" group="arm" />
+  <disable_collisions link1="base_link" link2="lip_1" reason="Default" />
+  <disable_collisions link1="link_base" link2="lip_1" reason="Default" />
+  <disable_collisions link1="front_right_1" link2="lip_1" reason="Default" />
+  <disable_collisions link1="front_left_1" link2="lip_1" reason="Default" />
+  <disable_collisions link1="back_right_1" link2="lip_1" reason="Default" />
+  <disable_collisions link1="back_left_1" link2="lip_1" reason="Default" />
   <disable_collisions link1="back_left_1" link2="back_right_1" reason="Default" />
   <disable_collisions link1="back_left_1" link2="base_link" reason="Default" />
   <disable_collisions link1="back_left_1" link2="front_left_1" reason="Default" />
@@ -113,6 +119,18 @@
   <disable_collisions link1="right_inner_knuckle" link2="right_outer_knuckle" reason="Default" />
   <disable_collisions link1="right_inner_knuckle" link2="xarm_gripper_base_link" reason="Default" />
   <disable_collisions link1="right_outer_knuckle" link2="xarm_gripper_base_link" reason="Default" />
+  <disable_collisions link1="base_link_collision_0" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_1" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_2" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_3" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_4" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_5" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_6" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_7" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_8" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_9" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_10" link2="lip_1" reason="Default" />
+  <disable_collisions link1="base_link_collision_11" link2="lip_1" reason="Default" />
   <disable_collisions link1="base_link_collision_0" link2="back_left_1" reason="Default" />
   <disable_collisions link1="base_link_collision_1" link2="back_left_1" reason="Default" />
   <disable_collisions link1="base_link_collision_2" link2="back_left_1" reason="Default" />

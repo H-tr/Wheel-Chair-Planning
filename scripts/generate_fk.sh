@@ -21,4 +21,10 @@ fi
 cd "$OUTDIR"
 "$CRICKET_BIN" "$CONFIG"
 
+# cricket's fk_template.hh writes `= {{{join(base_position, ", ")}}};`, and inja
+# reads the `{{{` as its own `{{` plus a stray brace that it drops, emitting
+# `base_position = 0.0, 0.0, 0.0};` which doesn't compile. Restore the brace.
+# Drop this once the template spells it `{ {{join(...)}} }`.
+sed -i -E 's/(base_position = )([^{;]*\};)/\1{\2/' wheelchair.hh
+
 echo "[generate_fk] Wrote $OUTDIR/wheelchair.hh"
